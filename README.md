@@ -1,4 +1,4 @@
-# Ai-Researcher-paper-Write-
+# Ai-Researcher-paper-Writer-
 
 AI-powered academic research and paper writing platform built for Nigerian students and lecturers. Combines agentic AI workflows, real-time literature retrieval, and citation-verified writing in a governed university-grade platform.
 
