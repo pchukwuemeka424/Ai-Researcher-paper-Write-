@@ -157,7 +157,7 @@ Copy `.env.example` to `.env` (root and/or `backend/.env`) and fill in values:
 
 ```env
 OPENROUTER_API_KEY=           # Required — your OpenRouter API key
-MONGODB_URI=mongodb://127.0.0.1:27017/feynman
+MONGODB_URI=
 PORT=3141
 FEYNMAN_MODEL=openrouter/openai/gpt-5.1
 AUTH_SECRET=change-me-in-production
