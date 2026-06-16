@@ -1,5 +1,7 @@
 import { apiUrl } from "@/lib/api";
 import type {
+	AdminBackupFile,
+	AdminBackupTable,
 	AdminLectureRecord,
 	AdminTokenRecord,
 	LectureAdminStats,
@@ -194,6 +196,38 @@ export async function bulkAdminResetTokens(ids: string[]): Promise<number> {
 		body: JSON.stringify({ ids }),
 	});
 	return data.reset;
+}
+
+export async function fetchAdminBackupTables(): Promise<AdminBackupTable[]> {
+	const data = await adminJson<{ tables: AdminBackupTable[] }>("/api/admin/backup/tables");
+	return data.tables ?? [];
+}
+
+export async function fetchAdminBackupFiles(): Promise<AdminBackupFile[]> {
+	const data = await adminJson<{ files: AdminBackupFile[] }>("/api/admin/backup/files");
+	return data.files ?? [];
+}
+
+export async function createAdminBackup(): Promise<AdminBackupFile> {
+	const data = await adminJson<{ file: AdminBackupFile }>("/api/admin/backup", { method: "POST" });
+	return data.file;
+}
+
+export async function downloadAdminBackupFile(filename: string): Promise<void> {
+	const res = await fetch(apiUrl(`/api/admin/backup/files/${encodeURIComponent(filename)}`), {
+		headers: authHeaders(),
+	});
+	if (!res.ok) {
+		const data = (await res.json()) as { error?: string };
+		throw new Error(data.error ?? "Download failed.");
+	}
+	const blob = await res.blob();
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = filename;
+	link.click();
+	URL.revokeObjectURL(url);
 }
 
 export function exportUsersCsv(users: UserRecord[]): void {

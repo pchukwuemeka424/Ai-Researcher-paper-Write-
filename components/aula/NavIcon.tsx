@@ -87,6 +87,14 @@ export function NavIcon({ id, size = 18 }: Props) {
 					<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" strokeLinejoin="round" />
 				</svg>
 			);
+		case "database":
+			return (
+				<svg {...props}>
+					<ellipse cx="12" cy="5" rx="8" ry="3" />
+					<path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+					<path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+				</svg>
+			);
 		default:
 			return (
 				<svg {...props}>

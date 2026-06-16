@@ -45,6 +45,7 @@ export const colors = {
 		tokens: { bg: "#d97706", fg: "#ffffff" },
 		admin: { bg: "#475569", fg: "#ffffff" },
 		folder: { bg: "#d97706", fg: "#ffffff" },
+		database: { bg: "#0f766e", fg: "#ffffff" },
 		notes: { bg: "#0d9488", fg: "#ffffff" },
 		default: { bg: "#64748b", fg: "#ffffff" },
 	},

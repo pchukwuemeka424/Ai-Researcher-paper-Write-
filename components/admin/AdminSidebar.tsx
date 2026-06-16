@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
 	SidebarBrand,
@@ -11,7 +11,7 @@ import {
 	SidebarSection,
 } from "@/components/sidebar/SidebarPrimitives";
 import { useAuth } from "@/hooks/useAuth";
-import { ADMIN_NAV_GROUPS, isAdminNavActive } from "@/lib/admin-nav";
+import { ADMIN_LOGIN_PATH, ADMIN_NAV_GROUPS, isAdminNavActive } from "@/lib/admin-nav";
 
 type Props = {
 	id?: string;
@@ -21,9 +21,16 @@ type Props = {
 
 export function AdminSidebar({ id = "admin-sidebar", className, onNavigate }: Props) {
 	const pathname = usePathname();
+	const router = useRouter();
 	const { user, logout } = useAuth();
 
 	if (!user) return null;
+
+	const handleLogout = () => {
+		logout();
+		onNavigate?.();
+		router.replace(ADMIN_LOGIN_PATH);
+	};
 
 	return (
 		<aside
@@ -61,7 +68,13 @@ export function AdminSidebar({ id = "admin-sidebar", className, onNavigate }: Pr
 					</svg>
 					Back to app
 				</Link>
-				<SidebarProfile user={user} onLogout={logout} />
+				<button type="button" className="admin-sidebar-logout" onClick={handleLogout}>
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+						<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
+					</svg>
+					Log out
+				</button>
+				<SidebarProfile user={user} onLogout={handleLogout} />
 			</div>
 		</aside>
 	);

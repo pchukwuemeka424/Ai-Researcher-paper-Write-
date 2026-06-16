@@ -95,6 +95,12 @@ import {
 	updateUser as adminUpdateUser,
 } from "./services/admin-users.service.js";
 import { AdminRequiredError, requireAdmin } from "./lib/require-admin.js";
+import {
+	createDatabaseBackup,
+	listBackupFiles,
+	listBackupTables,
+	readBackupFile,
+} from "./services/admin-backup.service.js";
 import { ensureDefaultAdmin } from "./services/bootstrap-admin.service.js";
 
 async function resolveUserId(authorization?: string): Promise<string | null> {
@@ -1190,6 +1196,66 @@ export async function startServer(port: number): Promise<void> {
 			}
 			const message = error instanceof Error ? error.message : String(error);
 			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get("/api/admin/backup/tables", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const tables = await listBackupTables();
+			return { tables };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get("/api/admin/backup/files", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			return { files: listBackupFiles() };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/backup", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const file = await createDatabaseBackup();
+			return { file };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get<{ Params: { filename: string } }>("/api/admin/backup/files/:filename", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const { content, size } = readBackupFile(request.params.filename);
+			return reply
+				.header("Content-Type", "application/json; charset=utf-8")
+				.header("Content-Disposition", `attachment; filename="${request.params.filename}"`)
+				.header("Content-Length", String(size))
+				.send(content);
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("not found") || message.includes("Invalid") ? 404 : 500;
+			return reply.code(status).send({ error: message });
 		}
 	});
 

@@ -40,3 +40,18 @@ export type TokenAdminStats = {
 };
 
 export type UpdateTokenInput = { reset?: boolean; tokensUsed?: number };
+
+export type AdminBackupTable = {
+	key: string;
+	label: string;
+	collection: string;
+	count: number;
+};
+
+export type AdminBackupFile = {
+	filename: string;
+	size: number;
+	createdAt: string;
+	tableCount: number | null;
+	documentCount: number | null;
+};

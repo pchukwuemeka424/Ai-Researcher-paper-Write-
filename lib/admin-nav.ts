@@ -68,6 +68,19 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
 			},
 		],
 	},
+	{
+		id: "system",
+		label: "System",
+		items: [
+			{
+				id: "admin-backup",
+				label: "Backup",
+				href: "/admin/backup",
+				iconId: "database",
+				description: "Database tables & backup files",
+			},
+		],
+	},
 ];
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = ADMIN_NAV_GROUPS.flatMap((group) => group.items);

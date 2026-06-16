@@ -3587,6 +3587,37 @@ button.dash-badge:hover {
   text-decoration: none;
 }
 
+.admin-sidebar-logout {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: calc(100% - 2rem);
+  margin: 0.5rem 1rem 0;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: var(--radius-md);
+  background: rgba(248, 113, 113, 0.08);
+  color: #fecaca;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.admin-sidebar-logout:hover {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fff;
+}
+
+.admin-panel-spaced {
+  margin-top: 1.25rem;
+}
+
+.admin-table-action-btn {
+  white-space: nowrap;
+}
+
 .admin-shell {
   flex: 1;
   min-width: 0;
