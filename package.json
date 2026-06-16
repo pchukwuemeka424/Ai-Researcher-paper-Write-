@@ -1,0 +1,32 @@
+{
+  "name": "feynman-web",
+  "description": "Feynman web UI (Next.js)",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "next dev",
+    "dev:backend": "bash backend/scripts/with-node.sh npm run dev",
+    "build": "next build",
+    "build:backend": "bash backend/scripts/with-node.sh npx tsc -p tsconfig.json",
+    "build:all": "npm run build && npm run build:backend",
+    "start": "bash backend/scripts/with-node.sh node dist/index.js",
+    "lint": "next lint",
+    "test:pdf": "npx tsx scripts/test-research-pdf-runner.ts"
+  },
+  "dependencies": {
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "marked": "^15.0.12",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "~5.9.3"
+  },
+  "packageManager": "pnpm@11.5.1+sha512.93f7b57422ea7068257235b4c16eb60762eb68e1dc23723199cc739043ea9be2c4143274a399d8c6defa2b1176226d9ca1c4b63482d6200c1a8fbaa78c1d1485"
+}

@@ -1,0 +1,243 @@
+/**
+ * TrustLed Aula — global color tokens.
+ * TypeScript mirror: lib/colors.ts (keep both files in sync).
+ */
+
+:root {
+  /* —— Brand —— */
+  --color-primary: #0D0B61;
+  --color-primary-hover: #12108a;
+  --color-primary-dark: #060549;
+  --color-primary-soft: #ececf8;
+  --color-primary-muted: rgba(13, 11, 97, 0.12);
+  --color-primary-shadow: rgba(13, 11, 97, 0.28);
+
+  --color-secondary: #2563eb;
+  --color-secondary-hover: #1d4ed8;
+  --color-secondary-muted: rgba(37, 99, 235, 0.08);
+  --color-secondary-glow: rgba(37, 99, 235, 0.06);
+  --color-secondary-shadow: rgba(37, 99, 235, 0.28);
+
+  --color-brand-navy: #0a7c6e;
+  --color-brand-teal: #0d9488;
+
+  /* —— Neutrals —— */
+  --color-white: #ffffff;
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-ink: #1a2332;
+
+  /* —— Status —— */
+  --color-success: #16a34a;
+  --color-success-muted: rgba(22, 163, 74, 0.1);
+  --color-danger: #dc2626;
+  --color-danger-muted: rgba(220, 38, 38, 0.08);
+  --color-warning: #d97706;
+  --color-info: #2563eb;
+  --color-completed: #059669;
+
+  /* —— Nav icon tones —— */
+  --color-icon-dashboard-bg: #ececf8;
+  --color-icon-dashboard-fg: #0D0B61;
+  --color-icon-research-bg: #ede9fe;
+  --color-icon-research-fg: #7c3aed;
+  --color-icon-references-bg: #dcfce7;
+  --color-icon-references-fg: #16a34a;
+  --color-icon-lesson-planner-bg: #e0e7ff;
+  --color-icon-lesson-planner-fg: #4f46e5;
+  --color-icon-chat-bg: #ffedd5;
+  --color-icon-chat-fg: #ea580c;
+  --color-icon-admin-bg: #f1f5f9;
+  --color-icon-admin-fg: #475569;
+  --color-icon-folder-bg: #fef3c7;
+  --color-icon-folder-fg: #d97706;
+  --color-icon-notes-bg: #ccfbf1;
+  --color-icon-notes-fg: #0d9488;
+  --color-icon-default-bg: #f1f5f9;
+  --color-icon-default-fg: #64748b;
+
+  /* —— Feature accents —— */
+  --color-research-accent: #4f46e5;
+  --color-research-accent-hover: #4338ca;
+  --color-research-accent-light: #6366f1;
+  --color-research-accent-muted: rgba(79, 70, 229, 0.1);
+  --color-research-accent-glow: rgba(99, 102, 241, 0.2);
+  --color-research-hero: #1e1b4b;
+
+  --color-lp-accent: #4f46e5;
+  --color-lp-accent-hover: #4338ca;
+  --color-lp-accent-light: #6366f1;
+  --color-lp-accent-muted: rgba(79, 70, 229, 0.1);
+  --color-lp-accent-glow: rgba(99, 102, 241, 0.12);
+  --color-lp-hero-from: #0D0B61;
+  --color-lp-hero-via: #1e1b4b;
+  --color-lp-hero-to: #312e81;
+
+  --color-login-accent: #7c3aed;
+  --color-login-accent-hover: #6d28d9;
+  --color-login-accent-soft: rgba(124, 58, 237, 0.08);
+
+  /* —— App-wide semantic aliases —— */
+  --bg-base: var(--color-white);
+  --bg-surface: var(--color-slate-50);
+  --bg-elevated: var(--color-white);
+  --bg-hover: var(--color-slate-100);
+  --bg-input: var(--color-white);
+  --border: var(--color-slate-200);
+  --border-strong: var(--color-slate-300);
+  --text: var(--color-slate-900);
+  --text-secondary: var(--color-slate-600);
+  --text-muted: var(--color-slate-400);
+  --accent: var(--color-secondary);
+  --accent-hover: var(--color-secondary-hover);
+  --accent-muted: var(--color-secondary-muted);
+  --accent-glow: var(--color-secondary-glow);
+  --success: var(--color-success);
+  --success-muted: var(--color-success-muted);
+  --danger: var(--color-danger);
+  --danger-muted: var(--color-danger-muted);
+  --warning: var(--color-warning);
+}
+
+/* —— Auth / login —— */
+.login-page {
+  --login-accent: var(--color-login-accent);
+  --login-accent-hover: var(--color-login-accent-hover);
+  --login-accent-soft: var(--color-login-accent-soft);
+  --login-surface: var(--color-white);
+  --login-surface-muted: var(--color-slate-50);
+  --login-border: var(--color-slate-200);
+  --login-border-strong: var(--color-slate-300);
+}
+
+.admin-login-page {
+  --login-accent: var(--color-primary);
+  --login-accent-hover: var(--color-primary-hover);
+  --login-accent-soft: var(--color-primary-muted);
+  --login-surface: var(--color-white);
+  --login-surface-muted: var(--color-slate-50);
+  --login-border: var(--color-slate-200);
+  --login-border-strong: var(--color-slate-300);
+}
+
+/* —— Marketing home —— */
+.home-page {
+  --home-navy: var(--color-slate-900);
+  --home-text: var(--color-slate-800);
+  --home-muted: var(--color-slate-500);
+  --home-border: var(--color-slate-200);
+  --home-surface: var(--color-slate-50);
+  --home-card: var(--color-white);
+}
+
+/* —— Lecturer dashboard (Aula) —— */
+.aula {
+  --aula-navy: var(--color-brand-navy);
+  --aula-navy-mid: color-mix(in srgb, var(--aula-navy) 85%, white);
+  --aula-navy-light: rgba(255, 255, 255, 0.1);
+  --aula-navy-active: var(--color-secondary);
+  --aula-blue: var(--color-secondary);
+  --aula-bg: #f0f2f5;
+  --aula-surface: var(--color-white);
+  --aula-border: #e5e8ed;
+  --aula-text: var(--color-ink);
+  --aula-muted: #6b7280;
+  --aula-active: var(--color-primary);
+  --aula-active-hover: var(--color-primary-hover);
+  --aula-active-soft: var(--color-primary-soft);
+}
+
+/* —— Sidebar —— */
+.app-sidebar {
+  --sb-base: #810b38;
+  --sb-base-deep: #5a0828;
+  --sb-active: #f4b8cc;
+  --sb-active-hover: #f9d0de;
+  --sb-active-soft: rgba(255, 255, 255, 0.14);
+  --sb-surface: #810b38;
+  --sb-bg: rgba(255, 255, 255, 0.1);
+  --sb-border: rgba(255, 255, 255, 0.14);
+  --sb-text: rgba(255, 255, 255, 0.96);
+  --sb-muted: rgba(255, 255, 255, 0.58);
+  --sb-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+/* —— Student workspace —— */
+.stu-app {
+  --stu-bg: #dce4eb;
+  --stu-surface: var(--color-white);
+  --stu-border: #e5eaf3;
+  --stu-text: var(--color-slate-900);
+  --stu-muted: var(--color-slate-500);
+  --stu-accent: var(--color-primary);
+  --stu-accent-hover: var(--color-primary-hover);
+  --stu-accent-soft: var(--color-primary-soft);
+  --stu-indigo: #121c26;
+  --stu-saved: var(--color-secondary);
+  --stu-progress: var(--color-warning);
+  --stu-completed: var(--color-completed);
+  --stu-teal: var(--color-brand-teal);
+  --stu-yellow: #f97316;
+}
+
+/* —— Research assistant —— */
+.research-page {
+  --research-accent: var(--color-icon-research-fg);
+  --research-accent-hover: var(--color-research-accent-hover);
+  --research-accent-light: var(--color-research-accent-light);
+  --research-accent-muted: var(--color-icon-research-bg);
+  --research-accent-glow: var(--color-research-accent-glow);
+  --research-hero-bg: var(--color-research-hero);
+  --research-surface: var(--aula-surface, var(--color-white));
+  --research-border: var(--aula-border, var(--color-slate-200));
+  --research-border-strong: var(--color-slate-300);
+  --research-text: var(--aula-text, var(--color-slate-900));
+  --research-muted: var(--aula-muted, var(--color-slate-500));
+}
+
+/* —— Lesson planner —— */
+.lp-page {
+  --lp-accent: var(--color-icon-lesson-planner-fg);
+  --lp-accent-hover: var(--color-lp-accent-hover);
+  --lp-accent-light: var(--color-lp-accent-light);
+  --lp-accent-muted: var(--color-icon-lesson-planner-bg);
+  --lp-accent-glow: var(--color-lp-accent-glow);
+  --lp-hero-from: var(--color-lp-hero-from);
+  --lp-hero-via: var(--color-lp-hero-via);
+  --lp-hero-to: var(--color-lp-hero-to);
+  --lp-surface: var(--aula-surface);
+  --lp-border: var(--aula-border);
+  --lp-border-strong: var(--color-slate-300);
+  --lp-text: var(--aula-text);
+  --lp-muted: var(--aula-muted);
+}
+
+/* —— Reference formatter —— */
+.ref-page {
+  --ref-accent: var(--color-icon-references-fg);
+  --ref-accent-hover: #15803d;
+  --ref-accent-muted: var(--color-icon-references-bg);
+  --ref-accent-glow: rgba(22, 163, 74, 0.12);
+  --ref-surface: var(--aula-surface, var(--color-white));
+  --ref-border: var(--aula-border, var(--color-slate-200));
+  --ref-border-strong: var(--color-slate-300);
+  --ref-text: var(--aula-text, var(--color-slate-900));
+  --ref-muted: var(--aula-muted, var(--color-slate-500));
+}
+
+/* —— Student research (teal variant) —— */
+.research-page-student {
+  --research-accent: var(--color-lp-accent);
+  --research-accent-hover: var(--color-lp-accent-hover);
+  --research-accent-light: var(--color-lp-accent-light);
+  --research-accent-muted: rgba(13, 148, 136, 0.12);
+  --research-hero-bg: #1c2d3d;
+}
