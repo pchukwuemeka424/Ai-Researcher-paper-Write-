@@ -8295,6 +8295,109 @@ button.dash-badge:hover {
   text-align: right;
 }
 
+.research-topic-guidance {
+  margin-top: 1rem;
+  padding: 1rem 1.125rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(139, 92, 246, 0.35);
+  background: rgba(139, 92, 246, 0.04);
+}
+
+.research-topic-guidance-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #5b21b6;
+}
+
+.research-topic-guidance-list {
+  margin: 0;
+  padding-left: 1.125rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.research-topic-guidance-list li {
+  margin-bottom: 0.35rem;
+}
+
+.research-topic-guidance-list li.research-topic-guidance-avoid {
+  color: #94a3b8;
+  text-decoration: line-through;
+  text-decoration-color: rgba(148, 163, 184, 0.6);
+}
+
+.research-topic-agent-pipeline {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.125rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--research-border);
+  background: var(--bg-surface);
+}
+
+.research-topic-agent-pipeline-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.research-topic-agent-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.research-topic-agent-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.research-topic-agent-step-active {
+  color: #5b21b6;
+  font-weight: 600;
+}
+
+.research-topic-agent-step-done {
+  color: #0f766e;
+}
+
+.research-topic-analysis {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.125rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(20, 184, 166, 0.25);
+  background: rgba(20, 184, 166, 0.04);
+}
+
+.research-topic-analysis-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f766e;
+}
+
+.research-topic-analysis-grid {
+  display: grid;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
+.research-topic-analysis-grid dt {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.research-topic-analysis-grid dd {
+  margin: 0.125rem 0 0;
+}
+
 .research-scope-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

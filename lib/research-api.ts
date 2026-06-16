@@ -231,3 +231,61 @@ export async function fetchResearchOutlineFromApi(input: {
 
 	return { outline, ...(data.tokenQuota ? { tokenQuota: data.tokenQuota } : {}) };
 }
+
+export type ResearchTopicAnalysisDto = {
+	scope: {
+		discipline: string;
+		researchArea: string;
+		variables: string[];
+		constructs: string[];
+		phenomena: string[];
+	};
+	contextAndGap: {
+		population: string;
+		context: string;
+		domain: string;
+		researchGap: string;
+	};
+};
+
+export async function fetchResearchIdeasFromApi(
+	input: {
+		disciplineLabel: string;
+		topic: string;
+		scope: ResearchScope;
+	},
+	options?: { signal?: AbortSignal },
+): Promise<{ ideasMarkdown: string; analysis?: ResearchTopicAnalysisDto; tokenQuota?: StudentTokenQuota }> {
+	const res = await fetch(apiUrl("/api/research/ideas/generate"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({
+			disciplineLabel: input.disciplineLabel,
+			topic: input.topic,
+			scope: input.scope,
+		}),
+		signal: options?.signal,
+	});
+
+	const data = (await res.json().catch(() => ({}))) as {
+		ideasMarkdown?: string;
+		analysis?: ResearchTopicAnalysisDto;
+		error?: string;
+		tokenQuota?: StudentTokenQuota;
+	};
+
+	if (!res.ok) {
+		throw new Error(data.error ?? `Ideas request failed (${res.status})`);
+	}
+
+	const ideasMarkdown = data.ideasMarkdown?.trim();
+	if (!ideasMarkdown) {
+		throw new Error("Ideas request returned empty content.");
+	}
+
+	return {
+		ideasMarkdown,
+		...(data.analysis ? { analysis: data.analysis } : {}),
+		...(data.tokenQuota ? { tokenQuota: data.tokenQuota } : {}),
+	};
+}

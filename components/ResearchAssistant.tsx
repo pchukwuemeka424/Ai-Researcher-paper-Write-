@@ -41,19 +41,28 @@ import { StudentLayout } from "@/components/StudentLayout";
 import { studentHasResearchTokens } from "@/components/StudentTokenQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { useFeynmanSocket } from "@/hooks/useFeynmanSocket";
+import { fetchResearchIdeasFromApi } from "@/lib/research-api";
 import { DEFAULT_DISCIPLINE, getDisciplineLabel } from "@/lib/research-disciplines";
 import {
 	buildResearchIdeasPrompt,
 	FOCUS_OPTIONS,
 	generateLocalResearchIdeas,
+	IDEA_GENERATION_PHASES,
 	ideasToMarkdown,
 	parseResearchIdeas,
 	SCOPE_OPTIONS,
+	type IdeaGenerationPhase,
 	type IdeaType,
 	type ResearchIdea,
 	type ResearchScope,
 	type ResearchSession,
+	type ResearchTopicAnalysis,
 } from "@/lib/research-ideas";
+import {
+	STRONG_TOPIC_EXAMPLES,
+	TOPIC_INPUT_HINT,
+	VAGUE_TOPIC_EXAMPLES,
+} from "@/lib/research-topic-guidance";
 import { loadAllSavedPapers, type SavedResearchPaper } from "@/lib/chat-research-storage";
 import { loadAllSavedOutlines } from "@/lib/research-outline-storage";
 import {
@@ -114,7 +123,7 @@ function SkeletonCards() {
 }
 
 export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecturer" | "student" }) {
-	const { user } = useAuth();
+	const { user, setTokenQuota } = useAuth();
 	const searchParams = useSearchParams();
 	const hasTokens = studentHasResearchTokens(user?.tokenQuota, user?.role);
 	const { status, messages, error, isBusy, sendPrompt, resetSession, clearMessages, abort } = useFeynmanSocket();
@@ -135,7 +144,12 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 	const [showHistory, setShowHistory] = useState(false);
 	const [viewMode, setViewMode] = useState<"cards" | "markdown">("cards");
 	const [copiedAll, setCopiedAll] = useState(false);
+	const [isGenerating, setIsGenerating] = useState(false);
+	const [generationPhase, setGenerationPhase] = useState<IdeaGenerationPhase | null>(null);
+	const [topicAnalysis, setTopicAnalysis] = useState<ResearchTopicAnalysis | null>(null);
+	const [generateError, setGenerateError] = useState<string | null>(null);
 	const prevBusyRef = useRef(false);
+	const generateAbortRef = useRef<AbortController | null>(null);
 
 	useEffect(() => {
 		const view = searchParams.get("view");
@@ -205,7 +219,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 		[savedIdeaKeys],
 	);
 
-	const handleGenerate = useCallback(() => {
+	const handleGenerate = useCallback(async () => {
 		if (!topic.trim()) {
 			setTopicTouched(true);
 			return false;
@@ -215,31 +229,79 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 
 		setHasGenerated(true);
 		setLocalIdeas(null);
+		setTopicAnalysis(null);
+		setGenerateError(null);
 		setViewMode("cards");
 		setFocusFilter("all");
 		setStep(3);
+		setIsGenerating(true);
+		setGenerationPhase("scope");
 
-		if (status === "connected") {
-			clearMessages();
-			sendPrompt(buildResearchIdeasPrompt(discipline, topic, scope));
+		const phaseOrder: IdeaGenerationPhase[] = ["scope", "context", "titles", "quality"];
+		let phaseIndex = 0;
+		const phaseTimer = window.setInterval(() => {
+			phaseIndex = Math.min(phaseIndex + 1, phaseOrder.length - 1);
+			setGenerationPhase(phaseOrder[phaseIndex]!);
+		}, 2800);
+
+		const controller = new AbortController();
+		generateAbortRef.current = controller;
+
+		try {
+			const result = await fetchResearchIdeasFromApi(
+				{
+					disciplineLabel,
+					topic: topic.trim(),
+					scope,
+				},
+				{ signal: controller.signal },
+			);
+
+			if (result.tokenQuota) setTokenQuota(result.tokenQuota);
+
+			const parsed = parseResearchIdeas(result.ideasMarkdown);
+			if (!parsed.length) {
+				throw new Error("Could not parse generated research ideas.");
+			}
+
+			setLocalIdeas(parsed);
+			if (result.analysis) setTopicAnalysis(result.analysis);
+			setRecentSessions(pushRecentSession({ discipline, topic: topic.trim(), scope, ideas: parsed }));
+			setGenerationPhase("done");
 			return true;
-		}
+		} catch (err) {
+			if (controller.signal.aborted) return false;
 
-		const ideas = generateLocalResearchIdeas(discipline, topic);
-		setLocalIdeas(ideas);
-		setRecentSessions(pushRecentSession({ discipline, topic, scope, ideas }));
-		return true;
-	}, [discipline, topic, scope, status, clearMessages, sendPrompt, hasTokens]);
+			const message = err instanceof Error ? err.message : "Generation failed.";
+			setGenerateError(message);
+
+			if (status === "connected") {
+				clearMessages();
+				sendPrompt(buildResearchIdeasPrompt(discipline, topic, scope));
+				return true;
+			}
+
+			const ideas = generateLocalResearchIdeas(discipline, topic);
+			setLocalIdeas(ideas);
+			setRecentSessions(pushRecentSession({ discipline, topic: topic.trim(), scope, ideas }));
+			setGenerationPhase("done");
+			return true;
+		} finally {
+			window.clearInterval(phaseTimer);
+			setIsGenerating(false);
+			generateAbortRef.current = null;
+		}
+	}, [discipline, topic, scope, status, clearMessages, sendPrompt, hasTokens, disciplineLabel, setTokenQuota]);
 
 	useEffect(() => {
-		if (!hasGenerated || isBusy || !topic.trim() || !scope) return;
+		if (!hasGenerated || isBusy || isGenerating || !topic.trim() || !scope) return;
 		if (localIdeas?.length || parsedIdeas?.length) return;
-		if (status === "connected" && !assistantContent && !error) return;
+		if (status === "connected" && !assistantContent && !error && !generateError) return;
 
 		const ideas = generateLocalResearchIdeas(discipline, topic);
 		setLocalIdeas(ideas);
 		setRecentSessions(pushRecentSession({ discipline, topic: topic.trim(), scope, ideas }));
-	}, [hasGenerated, isBusy, topic, localIdeas, parsedIdeas, status, assistantContent, error, discipline, scope]);
+	}, [hasGenerated, isBusy, isGenerating, topic, localIdeas, parsedIdeas, status, assistantContent, error, generateError, discipline, scope]);
 
 	useEffect(() => {
 		if (prevBusyRef.current && !isBusy && parsedIdeas?.length && scope) {
@@ -259,6 +321,11 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 		setFocusFilter("all");
 		setShowSaved(false);
 		setShowHistory(false);
+		setTopicAnalysis(null);
+		setGenerateError(null);
+		setGenerationPhase(null);
+		setIsGenerating(false);
+		generateAbortRef.current?.abort();
 		resetSession();
 	};
 
@@ -344,34 +411,130 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 		else if (step === 2) setStep(1);
 	};
 
+	const handleStopGenerate = () => {
+		generateAbortRef.current?.abort();
+		if (isBusy) abort();
+		setIsGenerating(false);
+		setGenerationPhase(null);
+	};
+
+	const renderAgentPipeline = () => {
+		if (!isGenerating && !generationPhase) return null;
+		const activePhase = generationPhase ?? "scope";
+		const phaseRank = (id: IdeaGenerationPhase) => IDEA_GENERATION_PHASES.findIndex((p) => p.id === id);
+
+		return (
+			<div className="research-topic-agent-pipeline" aria-live="polite">
+				<p className="research-topic-agent-pipeline-title">Multi-agent topic analysis</p>
+				<ol className="research-topic-agent-steps">
+					{IDEA_GENERATION_PHASES.filter((p) => p.id !== "done").map((phase) => {
+						const rank = phaseRank(phase.id);
+						const activeRank = phaseRank(activePhase);
+						const isActive = isGenerating && phase.id === activePhase;
+						const isDone = !isGenerating || activeRank > rank;
+						return (
+							<li
+								key={phase.id}
+								className={`research-topic-agent-step ${isActive ? "research-topic-agent-step-active" : ""} ${isDone ? "research-topic-agent-step-done" : ""}`}
+							>
+								<span aria-hidden>{isDone && !isActive ? "✓" : isActive ? "…" : "○"}</span>
+								<span>{phase.label}</span>
+							</li>
+						);
+					})}
+				</ol>
+			</div>
+		);
+	};
+
+	const renderTopicAnalysis = () => {
+		if (!topicAnalysis) return null;
+		const { scope: scopeAnalysis, contextAndGap } = topicAnalysis;
+		const listOrDash = (items: string[]) => (items.length ? items.join("; ") : "—");
+
+		return (
+			<div className="research-topic-analysis">
+				<p className="research-topic-analysis-title">Research framing (from your interest topic)</p>
+				<dl className="research-topic-analysis-grid">
+					<div>
+						<dt>Discipline</dt>
+						<dd>{scopeAnalysis.discipline}</dd>
+					</div>
+					<div>
+						<dt>Research area</dt>
+						<dd>{scopeAnalysis.researchArea}</dd>
+					</div>
+					<div>
+						<dt>Variables</dt>
+						<dd>{listOrDash(scopeAnalysis.variables)}</dd>
+					</div>
+					<div>
+						<dt>Constructs / phenomena</dt>
+						<dd>{listOrDash([...scopeAnalysis.constructs, ...scopeAnalysis.phenomena])}</dd>
+					</div>
+					<div>
+						<dt>Population</dt>
+						<dd>{contextAndGap.population}</dd>
+					</div>
+					<div>
+						<dt>Context &amp; domain</dt>
+						<dd>
+							{contextAndGap.context}
+							{contextAndGap.domain && contextAndGap.domain !== contextAndGap.context
+								? ` · ${contextAndGap.domain}`
+								: ""}
+						</dd>
+					</div>
+					<div>
+						<dt>Research gap</dt>
+						<dd>{contextAndGap.researchGap}</dd>
+					</div>
+				</dl>
+			</div>
+		);
+	};
+
 	const renderResults = () => {
-		if (isBusy && !parsedIdeas?.length) return <SkeletonCards />;
+		if ((isGenerating || isBusy) && !parsedIdeas?.length) {
+			return (
+				<>
+					{renderAgentPipeline()}
+					<SkeletonCards />
+				</>
+			);
+		}
 
 		if (filteredIdeas && filteredIdeas.length > 0) {
 			if (viewMode === "markdown") {
 				return (
-					<div className="research-markdown-panel">
-						<ReactMarkdown>{ideasToMarkdown(filteredIdeas, disciplineLabel, topic.trim())}</ReactMarkdown>
-					</div>
+					<>
+						{renderTopicAnalysis()}
+						<div className="research-markdown-panel">
+							<ReactMarkdown>{ideasToMarkdown(filteredIdeas, disciplineLabel, topic.trim())}</ReactMarkdown>
+						</div>
+					</>
 				);
 			}
 			return (
-				<div className="research-ideas-grid">
-					{filteredIdeas.map((idea, i) => (
-						<ResearchIdeaCard
-							key={idea.id}
-							idea={idea}
-							index={i}
-							topic={topic.trim()}
-							discipline={discipline}
-							scope={scope || "masters"}
-							saved={isSavedIdea(idea)}
-							studentUI={variant === "student"}
-							onSave={() => handleSave(idea)}
-							onUnsave={() => handleUnsave(idea)}
-						/>
-					))}
-				</div>
+				<>
+					{renderTopicAnalysis()}
+					<div className="research-ideas-grid">
+						{filteredIdeas.map((idea, i) => (
+							<ResearchIdeaCard
+								key={idea.id}
+								idea={idea}
+								index={i}
+								topic={topic.trim()}
+								discipline={discipline}
+								scope={scope || "masters"}
+								saved={isSavedIdea(idea)}
+								studentUI={variant === "student"}
+								onSave={() => handleSave(idea)}
+								onUnsave={() => handleUnsave(idea)}
+							/>
+						))}
+					</div>
+				</>
 			);
 		}
 
@@ -407,7 +570,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 					</div>
 					<h3>Could not generate ideas</h3>
 					<p>
-						{error
+						{error || generateError
 							? "The research agent returned an error. Template ideas will load automatically, or try again."
 							: "Something went wrong. Go back and try again."}
 					</p>
@@ -640,7 +803,8 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 										<div>
 											<h2 className="research-wizard-title">Your interest topic</h2>
 											<p className="research-wizard-subtitle">
-												Describe what you want to explore — the more specific, the better the ideas.
+												Share a theme or draft focus. A four-agent pipeline will identify discipline, variables,
+												population, context, and research gaps before formulating publishable study titles.
 											</p>
 										</div>
 									</div>
@@ -664,7 +828,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 												</span>
 												<span>Interest topic</span>
 											</label>
-											<p className="research-input-hint">Be specific — include context, population, or method if you can.</p>
+											<p className="research-input-hint">{TOPIC_INPUT_HINT}</p>
 											<div className="research-input-icon-wrap">
 												<span className="research-input-leading-icon" aria-hidden>
 													<IconEdit size={16} />
@@ -674,7 +838,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 													className="research-topic-input"
 													rows={5}
 													maxLength={500}
-													placeholder="e.g. artificial intelligence in higher education, climate resilience in coastal cities…"
+													placeholder={STRONG_TOPIC_EXAMPLES[0]}
 													value={topic}
 													onChange={(e) => setTopic(e.target.value)}
 													autoFocus
@@ -682,6 +846,19 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 											</div>
 											{topicError && <p className="error-text">Please enter an interest topic.</p>}
 											<p className="research-char-count">{topic.length} / 500</p>
+											<div className="research-topic-guidance">
+												<p className="research-topic-guidance-title">Themes vs. research topics</p>
+												<ul className="research-topic-guidance-list">
+													{VAGUE_TOPIC_EXAMPLES.slice(0, 3).map((example) => (
+														<li key={example} className="research-topic-guidance-avoid">
+															{example} — too broad
+														</li>
+													))}
+													{STRONG_TOPIC_EXAMPLES.slice(0, 2).map((example) => (
+														<li key={example}>{example}</li>
+													))}
+												</ul>
+											</div>
 										</div>
 									</div>
 									{recentSessions.length > 0 && (
@@ -795,6 +972,9 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 									)}
 
 									{error && <div className="banner banner-error research-error">{error}</div>}
+									{generateError && !parsedIdeas?.length && (
+										<div className="banner banner-error research-error">{generateError}</div>
+									)}
 									{!hasTokens && (
 										<div className="banner banner-error research-error">
 											{variant === "student"
@@ -823,7 +1003,13 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 										Start over
 									</button>
 								)}
-								{isBusy && step === 3 && (
+								{isGenerating && step === 3 && (
+									<button type="button" className="research-nav-btn research-nav-btn-ghost" onClick={handleStopGenerate}>
+										<IconStop size={16} />
+										Stop
+									</button>
+								)}
+								{isBusy && !isGenerating && step === 3 && (
 									<button type="button" className="research-nav-btn research-nav-btn-ghost" onClick={abort}>
 										<IconStop size={16} />
 										Stop
@@ -834,11 +1020,11 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 										type="button"
 										className="research-nav-btn research-nav-btn-next"
 										onClick={goNext}
-										disabled={(step === 2 && isBusy) || (step === 2 && !hasTokens)}
+										disabled={(step === 2 && (isGenerating || isBusy)) || (step === 2 && !hasTokens)}
 										title={step === 2 && !hasTokens ? "Research token limit reached" : undefined}
 									>
-										{step === 2 && !isBusy && <IconSparkles size={16} />}
-										{step === 2 ? (isBusy ? "Generating…" : "Generate ideas") : "Next"}
+										{step === 2 && !isGenerating && !isBusy && <IconSparkles size={16} />}
+										{step === 2 ? (isGenerating || isBusy ? "Generating…" : "Generate ideas") : "Next"}
 										{step === 1 && <IconChevronRight size={16} />}
 									</button>
 								)}

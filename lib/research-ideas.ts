@@ -1,4 +1,5 @@
 import { getDisciplineLabel } from "@/lib/research-disciplines";
+import { TOPIC_QUALITY_RULES } from "@/lib/research-topic-guidance";
 
 export type IdeaType = "empirical" | "theoretical" | "interdisciplinary" | "applied";
 export type IdeaFeasibility = "high" | "medium" | "exploratory";
@@ -12,6 +13,37 @@ export type ResearchIdea = {
 	type: IdeaType;
 	feasibility: IdeaFeasibility;
 };
+
+export type ResearchTopicAnalysis = {
+	scope: {
+		discipline: string;
+		researchArea: string;
+		variables: string[];
+		constructs: string[];
+		phenomena: string[];
+	};
+	contextAndGap: {
+		population: string;
+		context: string;
+		domain: string;
+		researchGap: string;
+	};
+};
+
+export type IdeaGenerationPhase =
+	| "scope"
+	| "context"
+	| "titles"
+	| "quality"
+	| "done";
+
+export const IDEA_GENERATION_PHASES: { id: IdeaGenerationPhase; label: string }[] = [
+	{ id: "scope", label: "Identifying discipline & variables" },
+	{ id: "context", label: "Mapping population & research gap" },
+	{ id: "titles", label: "Formulating study titles" },
+	{ id: "quality", label: "Validating specificity" },
+	{ id: "done", label: "Complete" },
+];
 
 export type ResearchSession = {
 	id: string;
@@ -54,48 +86,49 @@ export const FOCUS_OPTIONS: { id: IdeaType | "all"; label: string }[] = [
 type IdeaTemplate = Omit<ResearchIdea, "id">;
 
 function buildTemplates(topic: string, disciplineLabel: string): IdeaTemplate[] {
+	const area = topic.trim() || disciplineLabel;
 	return [
 		{
-			title: `What factors most influence ${topic} within ${disciplineLabel}?`,
-			rationale: "Identifying key drivers establishes a foundation for further empirical or theoretical work in this area.",
-			approach: "Systematic literature review followed by a mixed-methods survey or case study.",
+			title: `How does [independent variable] affect [dependent outcome] among [specific population] in [context: region/institution/sector] within ${disciplineLabel}?`,
+			rationale: `Addresses a measurable relationship in ${area} with defined units of analysis rather than a broad theme.`,
+			approach: "Cross-sectional survey or structured interviews with validated scales; multivariate regression controlling for confounders.",
 			type: "empirical",
 			feasibility: "high",
 		},
 		{
-			title: `How has the understanding of ${topic} evolved over the past decade in ${disciplineLabel}?`,
-			rationale: "Mapping intellectual trajectories reveals gaps, emerging paradigms, and opportunities for novel contributions.",
-			approach: "Bibliometric analysis combined with thematic synthesis of landmark publications.",
-			type: "theoretical",
-			feasibility: "high",
+			title: `A longitudinal analysis of [construct/phenomenon] trajectories for [population] in [setting] (${new Date().getFullYear() - 5}–${new Date().getFullYear()})`,
+			rationale: `Tracks change over time to identify trends and gaps in ${area}, supporting publishable temporal claims.`,
+			approach: "Secondary panel data or repeated measures; time-series or growth-curve modelling.",
+			type: "empirical",
+			feasibility: "medium",
 		},
 		{
-			title: `What are the ethical and practical implications of applying ${topic} in real-world ${disciplineLabel} contexts?`,
-			rationale: "Bridging theory and practice ensures research remains relevant and responsibly scoped.",
-			approach: "Qualitative interviews with practitioners and stakeholder analysis.",
+			title: `Comparing [intervention/policy A] versus [status quo B] on [outcome] for [population] in [context]`,
+			rationale: "Specifies comparators, outcomes, and setting — suitable for quasi-experimental or comparative case design.",
+			approach: "Matched comparison groups, difference-in-differences or case-comparison with explicit coding protocol.",
 			type: "applied",
 			feasibility: "medium",
 		},
 		{
-			title: `Can interdisciplinary approaches from adjacent fields improve outcomes related to ${topic}?`,
-			rationale: "Cross-disciplinary synthesis often surfaces underexplored angles and methodological innovations.",
-			approach: "Comparative framework analysis drawing on two or more related disciplines.",
+			title: `Integrating [theory/construct from adjacent field] to explain [phenomenon] among [population] in ${disciplineLabel}`,
+			rationale: "Cross-disciplinary framing with named constructs moves beyond theme-level statements.",
+			approach: "Conceptual synthesis plus illustrative empirical test or systematic scoping review.",
 			type: "interdisciplinary",
 			feasibility: "exploratory",
 		},
 		{
-			title: `What measurable outcomes best capture the impact of ${topic} on ${disciplineLabel} practice?`,
-			rationale: "Defining robust metrics enables reproducible evaluation and comparison across studies.",
-			approach: "Pilot study with pre/post measurement and validated assessment instruments.",
+			title: `Moderating role of [contextual factor] in the relationship between [X] and [Y] for [population] in [domain]`,
+			rationale: "Specifies moderators and boundary conditions — a common publishable structure in empirical work.",
+			approach: "Moderated regression or structural equation modelling on primary or secondary data.",
 			type: "empirical",
 			feasibility: "medium",
 		},
 		{
-			title: `How do demographic, cultural, or contextual variables moderate the effects of ${topic}?`,
-			rationale: "Understanding moderators prevents overgeneralisation and supports equitable research design.",
-			approach: "Secondary data analysis or stratified experimental design.",
-			type: "empirical",
-			feasibility: "exploratory",
+			title: `Critical review of methodological limitations in existing studies on [specific phenomenon] in [context]`,
+			rationale: "Targets a defensible gap (methods, context, or measurement) rather than a generic literature theme.",
+			approach: "Systematic review with quality appraisal and agenda for future primary research.",
+			type: "theoretical",
+			feasibility: "high",
 		},
 	];
 }
@@ -280,21 +313,32 @@ export function buildResearchIdeasPrompt(
 	const disciplineLabel = getDisciplineLabel(disciplineId);
 	const scopeLabel = SCOPE_OPTIONS.find((s) => s.id === scope)?.label ?? scope;
 
-	return `You are an academic research advisor. Generate exactly 6 distinct, specific research question ideas for a ${scopeLabel}-level scholar in ${disciplineLabel} interested in "${topic.trim()}".
+	return `You are an academic research advisor running a multi-step analysis before generating ideas.
+
+STEP 1 — Before generating any topic, identify:
+1. The discipline
+2. The research area (sub-field, not a vague theme)
+3. Major variables, constructs, or phenomena
+4. A realistic population, context, or domain
+5. A potential research gap, challenge, trend, controversy, limitation, or emerging issue
+
+STEP 2 — Formulate exactly 6 distinct study titles that could realistically become publishable academic studies for a ${scopeLabel}-level scholar in ${disciplineLabel}, starting from this interest: "${topic.trim()}".
+
+${TOPIC_QUALITY_RULES}
 
 For each idea use this exact markdown structure:
 
-### 1. [Research question title]
+### 1. [Full publishable study title — variables, population, context, perspective]
 **Type:** Empirical | Theoretical | Interdisciplinary | Applied
 **Feasibility:** High | Moderate | Exploratory
-**Rationale:** [1–2 sentences on significance and feasibility]
-**Approach:** [Brief suggested methodology]
+**Rationale:** [1–2 sentences linking to the identified gap and ${scopeLabel}-level feasibility]
+**Approach:** [Named design, data source, population, and analysis]
 
 Requirements:
 - Match scope to ${scopeLabel} level (complexity and ambition)
-- Be creative but academically rigorous
-- Focus on publishable, actionable questions
-- Do not ask clarifying questions — generate all 6 ideas directly`;
+- Each title must name what is studied, which variables are involved, who/what is studied, and the context
+- Vary study types across the 6 ideas
+- Do not ask clarifying questions — complete the analysis and generate all 6 ideas directly`;
 }
 
 export function parseResearchIdeas(content: string): ResearchIdea[] {

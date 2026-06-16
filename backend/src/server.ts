@@ -36,6 +36,7 @@ import {
 import { listWorkflows } from "./services/workflows.js";
 import { fetchPapersForQuery } from "./services/alphaxiv.service.js";
 import { generateResearchOutline } from "./services/outline.service.js";
+import { generateResearchIdeas } from "./services/research-ideas.service.js";
 import {
 	assertStudentHasTokenBalance,
 	deductStudentTokens,
@@ -365,6 +366,55 @@ export async function startServer(port: number): Promise<void> {
 			return {
 				outline: result.outline,
 				papers: result.papers,
+				...(tokenQuota ? { tokenQuota } : {}),
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(502).send({ error: message });
+		}
+	});
+
+	app.post("/api/research/ideas/generate", async (request, reply) => {
+		const body = request.body as {
+			discipline?: string;
+			disciplineLabel?: string;
+			topic?: string;
+			scope?: string;
+		};
+
+		if (!body.disciplineLabel?.trim()) {
+			return reply.code(400).send({ error: "disciplineLabel is required." });
+		}
+		if (!body.topic?.trim()) {
+			return reply.code(400).send({ error: "topic is required." });
+		}
+
+		const scope = body.scope?.trim();
+		const validScopes = new Set(["undergraduate", "masters", "doctoral", "faculty"]);
+		if (!scope || !validScopes.has(scope)) {
+			return reply.code(400).send({ error: "scope must be undergraduate, masters, doctoral, or faculty." });
+		}
+
+		try {
+			const userId = await resolveUserId(request.headers.authorization);
+			if (userId) {
+				await assertStudentHasTokenBalance(userId);
+			}
+
+			const result = await generateResearchIdeas({
+				disciplineLabel: body.disciplineLabel.trim(),
+				topic: body.topic.trim(),
+				scope: scope as "undergraduate" | "masters" | "doctoral" | "faculty",
+			});
+
+			let tokenQuota;
+			if (userId && result.usage?.totalTokens) {
+				tokenQuota = await deductStudentTokens(userId, result.usage.totalTokens);
+			}
+
+			return {
+				ideasMarkdown: result.ideasMarkdown,
+				analysis: result.analysis,
 				...(tokenQuota ? { tokenQuota } : {}),
 			};
 		} catch (error) {
