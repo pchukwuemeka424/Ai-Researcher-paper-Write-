@@ -9,6 +9,8 @@ export type SavedResearchIdeaDto = {
 	title: string;
 	rationale: string;
 	approach: string;
+	outline?: string;
+	researchQuestions?: string[];
 	type: SavedIdea["type"];
 	feasibility: SavedIdea["feasibility"];
 	discipline: string;
@@ -23,6 +25,8 @@ function mapIdea(dto: SavedResearchIdeaDto): SavedIdea {
 		title: dto.title,
 		rationale: dto.rationale,
 		approach: dto.approach,
+		...(dto.outline?.trim() ? { outline: dto.outline } : {}),
+		...(dto.researchQuestions?.length ? { researchQuestions: dto.researchQuestions } : {}),
 		type: dto.type,
 		feasibility: dto.feasibility,
 		savedAt: dto.savedAt,
@@ -70,6 +74,8 @@ export async function persistIdeaToApi(
 				title: idea.title,
 				rationale: idea.rationale,
 				approach: idea.approach,
+				outline: idea.outline,
+				researchQuestions: idea.researchQuestions,
 				type: idea.type,
 				feasibility: idea.feasibility,
 				discipline: idea.discipline,

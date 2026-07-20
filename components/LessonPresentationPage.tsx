@@ -44,19 +44,22 @@ export function LessonPresentationPage() {
 
 	const persistPresentation = useCallback(
 		async (context: LessonPlannerSession, deck: CoursePresentation, planId?: string | null) => {
-			const saved = await persistCoursePlanToApi({
-				id: planId ?? savedPlanId ?? context.savedPlanId,
-				title: context.title,
-				department: context.department,
-				level: context.level,
-				outline: context.outline,
-				presentation: deck,
-			});
-			if (saved) {
+			try {
+				const saved = await persistCoursePlanToApi({
+					id: planId ?? savedPlanId ?? context.savedPlanId,
+					title: context.title,
+					department: context.department,
+					level: context.level,
+					outline: context.outline,
+					presentation: deck,
+				});
 				setSavedPlanId(saved.id);
 				setSaveNotice("Course preparation saved");
 				notifySavedLessonsChanged();
 				setTimeout(() => setSaveNotice(null), 2500);
+			} catch {
+				setSaveNotice("Could not save — try again");
+				setTimeout(() => setSaveNotice(null), 3000);
 			}
 		},
 		[savedPlanId],

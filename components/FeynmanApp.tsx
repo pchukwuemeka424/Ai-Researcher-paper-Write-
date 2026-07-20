@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 
 import { AulaLayout } from "@/components/AulaLayout";
 import { ChatPanel } from "@/components/ChatPanel";
@@ -33,8 +32,14 @@ import {
 import { formatResearchPaperReferences } from "@/lib/research-paper-references";
 import { consumeChatPrefill } from "@/lib/research-ideas";
 import { prepareResearchPaperPrompt } from "@/lib/prepare-research-paper";
+import {
+	consumeResearchFigureAppendix,
+	injectSavedFiguresIntoPaper,
+	peekResearchFigureAppendix,
+} from "@/lib/research-figure-appendix";
 import { peekOutlinePageContext, resolveOutlinePageContext } from "@/lib/research-outline-context";
 import { consumePendingResearchPaper } from "@/lib/research-paper-pending";
+import { ResearchPaperMarkdown } from "@/components/research/ResearchPaperMarkdown";
 import { savedResearchPagePath } from "@/lib/saved-research-routes";
 import { DEFAULT_CITATION_STYLE, type CitationStyle } from "@/lib/citation-styles";
 import type { ChatMessage } from "@/lib/agent-events";
@@ -117,7 +122,11 @@ export function FeynmanApp({ layout = "aula" }: { layout?: "aula" | "student" })
 		.find((m) => m.role === "assistant" && m.content.trim());
 	const paperContent = lastAssistantMessage?.content.trim() ?? "";
 	const paperTokenUsage = lastAssistantMessage?.tokenUsage;
-	const activePaperContent = viewingSaved?.content ?? paperContent;
+	const paperContentWithFigures = injectSavedFiguresIntoPaper(
+		paperContent,
+		viewingSaved ? "" : peekResearchFigureAppendix(),
+	);
+	const activePaperContent = viewingSaved?.content ?? paperContentWithFigures;
 	const formattedPaperContent = activePaperContent ? formatResearchPaperReferences(activePaperContent) : "";
 	const paperTitle = extractPaperTitle(formattedPaperContent || activePaperContent, paperTopic || "Research paper");
 	const paperReady = Boolean(formattedPaperContent) && !isBusy;
@@ -153,7 +162,14 @@ export function FeynmanApp({ layout = "aula" }: { layout?: "aula" | "student" })
 	useEffect(() => {
 		if (prevBusyRef.current && !isBusy && !viewingSaved) {
 			if (paperTopic && paperContent.length > 400) {
-				void saveResearchPaper(paperTopic, paperContent, {
+				const withFigures = injectSavedFiguresIntoPaper(
+					paperContent,
+					peekResearchFigureAppendix(),
+				);
+				if (withFigures !== paperContent) {
+					consumeResearchFigureAppendix();
+				}
+				void saveResearchPaper(paperTopic, withFigures, {
 					sessionId,
 					tokenUsage: paperTokenUsage,
 				}).then((next) => {
@@ -200,7 +216,9 @@ export function FeynmanApp({ layout = "aula" }: { layout?: "aula" | "student" })
 
 	const handleSavePaper = () => {
 		if (!paperTopic || !paperContent) return;
-		void saveResearchPaper(paperTopic, paperContent, {
+		const withFigures = injectSavedFiguresIntoPaper(paperContent, peekResearchFigureAppendix());
+		if (withFigures !== paperContent) consumeResearchFigureAppendix();
+		void saveResearchPaper(paperTopic, withFigures, {
 			sessionId,
 			tokenUsage: paperTokenUsage,
 		}).then((next) => {
@@ -705,7 +723,7 @@ export function FeynmanApp({ layout = "aula" }: { layout?: "aula" | "student" })
 							</button>
 						</header>
 						<div className="research-history-modal-body research-markdown-panel">
-							<ReactMarkdown>{formattedPaperContent}</ReactMarkdown>
+							<ResearchPaperMarkdown content={formattedPaperContent} />
 						</div>
 						<footer className="research-history-modal-foot stu-paper-preview-foot">
 							<button type="button" className="stu-paper-btn" onClick={() => setPreviewOpen(false)}>

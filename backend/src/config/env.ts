@@ -28,9 +28,18 @@ export function getOpenRouterModel(): string {
 	return parseOpenRouterModelSpec(spec);
 }
 
-/** Faster/cheaper model for structured tasks like research outlines. */
+/** Faster/cheaper model for lightweight structured tasks (e.g. idea scoping). */
 export function getOpenRouterFastModel(): string {
 	const spec = process.env.FEYNMAN_FAST_MODEL?.trim() || "openrouter/openai/gpt-4o-mini";
+	return parseOpenRouterModelSpec(spec);
+}
+
+/** Stronger model for full research outlines (defaults to the main chat model). */
+export function getOpenRouterOutlineModel(): string {
+	const spec =
+		process.env.FEYNMAN_OUTLINE_MODEL?.trim() ||
+		process.env.FEYNMAN_MODEL?.trim() ||
+		"openrouter/openai/gpt-5.1";
 	return parseOpenRouterModelSpec(spec);
 }
 
@@ -77,4 +86,16 @@ export function getTavilyApiKey(): string | null {
 
 export function isTavilyEnabled(): boolean {
 	return process.env.TAVILY_ENABLED !== "false";
+}
+
+/** Local paper library RAG — check Mongo before AlphaXiv/arXiv/Tavily. */
+export function isPaperLibraryEnabled(): boolean {
+	return process.env.PAPER_LIBRARY_ENABLED !== "false";
+}
+
+/** Minimum library hits before skipping external literature APIs. */
+export function getPaperLibraryMinHits(): number {
+	const raw = Number.parseInt(process.env.PAPER_LIBRARY_MIN_HITS ?? "4", 10);
+	if (!Number.isFinite(raw) || raw < 1) return 4;
+	return Math.min(raw, 20);
 }

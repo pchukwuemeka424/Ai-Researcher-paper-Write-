@@ -1,4 +1,5 @@
 import type { ResearchIdea, ResearchScope } from "@/lib/research-ideas";
+import type { ResearchSourceSelection } from "@/lib/research-assets-api";
 import { loadSavedIdeas } from "@/lib/research-storage";
 import { getSavedOutlineByKey, outlineStorageKey } from "@/lib/research-outline-storage";
 
@@ -10,6 +11,7 @@ export type OutlinePageContext = {
 	discipline: string;
 	topic: string;
 	scope: ResearchScope;
+	sources?: ResearchSourceSelection;
 	returnTo?: string;
 };
 
@@ -18,6 +20,7 @@ export function stageOutlinePageContext(input: {
 	discipline: string;
 	topic: string;
 	scope: ResearchScope;
+	sources?: ResearchSourceSelection;
 	returnTo?: string;
 }): string {
 	const key = outlineStorageKey(input.idea, input.discipline, input.topic, input.scope);

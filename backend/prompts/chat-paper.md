@@ -69,11 +69,16 @@ Target length: **at least 2,500 words** of body text (excluding references), unl
 - No meta-commentary about being an AI; no “I will now write…”; start directly with the title.
 - Do not ask clarifying questions—make reasonable assumptions and state them briefly in the introduction if needed.
 
-## Figures and images (prohibited)
+## Tables, graphs, and conceptual images
 
-- **Do not** include images, figures, charts, plots, diagrams, or visual placeholders.
-- **Do not** use Markdown image syntax (`![...](...)`), Mermaid, or HTML `<img>`.
-- Present quantitative comparisons in **Markdown tables** or prose only.
+- Use valid GitHub-flavored Markdown tables when they clarify literature comparisons, methods, or results: include a pipe-delimited header row, an immediate `| --- |` separator row, then data rows.
+- Never invent a “Data Source and Variables” section. Raw dataset samples belong only in Results / Analysis and must stay at most 5 rows.
+- When canonical dataset sample tables or `research-chart` blocks are supplied, reproduce them exactly (do not expand beyond the given rows) and do not alter their values.
+- Without supplied data, illustrative graphs are allowed only when clearly labelled **Illustrative** and described as synthetic examples—not observed findings.
+- Graphs must use fenced `research-chart` JSON blocks in the schema requested by the user prompt.
+- Conceptual frameworks, processes, and relationships may use fenced `research-image` JSON blocks in the schema requested by the user prompt.
+- Conceptual images are explanatory illustrations, not empirical evidence or photographs.
+- Do not use Markdown image URLs, Mermaid, HTML `<img>`, or remote image links.
 
 ## Follow-up messages
 

@@ -5,6 +5,7 @@ import type { TokenUsage } from "@/lib/token-usage";
 import type { OutlinePaper } from "@/lib/research-outline-sources";
 import type { StudentTokenQuota } from "@/lib/student-tokens";
 import type { ResearchIdea, ResearchScope } from "@/lib/research-ideas";
+import type { ResearchSourceSelection } from "@/lib/research-assets-api";
 
 export type SavedResearchDto = SavedResearchPaper & {
 	userId?: string | null;
@@ -168,7 +169,9 @@ export async function fetchPapersForOutline(query: string, limit = 6): Promise<O
 
 	try {
 		const params = new URLSearchParams({ q: trimmed, limit: String(limit) });
-		const res = await fetch(apiUrl(`/api/papers/search?${params.toString()}`));
+		const res = await fetch(apiUrl(`/api/papers/search?${params.toString()}`), {
+			headers: authHeaders(),
+		});
 		if (!res.ok) return null;
 
 		const data = (await res.json()) as { papers?: PaperSearchDto[] };
@@ -194,7 +197,8 @@ export async function fetchResearchOutlineFromApi(input: {
 	disciplineLabel: string;
 	topic: string;
 	scope: ResearchScope;
-}): Promise<{ outline: string; tokenQuota?: StudentTokenQuota }> {
+	sources?: ResearchSourceSelection;
+}): Promise<{ outline: string; sourceContext?: string; tokenQuota?: StudentTokenQuota }> {
 	const res = await fetch(apiUrl("/api/research/outline"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -206,16 +210,20 @@ export async function fetchResearchOutlineFromApi(input: {
 				approach: input.idea.approach,
 				type: input.idea.type,
 				feasibility: input.idea.feasibility,
+				outline: input.idea.outline,
+				researchQuestions: input.idea.researchQuestions,
 			},
 			discipline: input.disciplineLabel,
 			disciplineLabel: input.disciplineLabel,
 			topic: input.topic,
 			scope: input.scope,
+			sources: input.sources,
 		}),
 	});
 
 	const data = (await res.json().catch(() => ({}))) as {
 		outline?: string;
+		sourceContext?: string;
 		error?: string;
 		tokenQuota?: StudentTokenQuota;
 	};
@@ -229,7 +237,61 @@ export async function fetchResearchOutlineFromApi(input: {
 		throw new Error("Outline request returned empty content.");
 	}
 
-	return { outline, ...(data.tokenQuota ? { tokenQuota: data.tokenQuota } : {}) };
+	return {
+		outline,
+		...(data.sourceContext?.trim() ? { sourceContext: data.sourceContext.trim() } : {}),
+		...(data.tokenQuota ? { tokenQuota: data.tokenQuota } : {}),
+	};
+}
+
+export async function fetchResearchSourceContextFromApi(
+	sources: ResearchSourceSelection,
+): Promise<string> {
+	const res = await fetch(apiUrl("/api/research/source-context"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({ sources }),
+	});
+	const data = (await res.json().catch(() => ({}))) as { sourceContext?: string; error?: string };
+	if (!res.ok) {
+		throw new Error(data.error ?? `Source context request failed (${res.status})`);
+	}
+	return data.sourceContext?.trim() ?? "";
+}
+
+export async function fetchResearchVisualizationsFromApi(input: {
+	datasetIds?: string[];
+	projectIds?: string[];
+	topic: string;
+}): Promise<{ artifacts: string; figureAppendix: string; hasSavedFigures: boolean }> {
+	const datasetIds = input.datasetIds ?? [];
+	const projectIds = input.projectIds ?? [];
+	if (!datasetIds.length && !projectIds.length) {
+		return { artifacts: "", figureAppendix: "", hasSavedFigures: false };
+	}
+	const res = await fetch(apiUrl("/api/research/visualizations"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({
+			datasetIds,
+			projectIds,
+			topic: input.topic,
+		}),
+	});
+	const data = (await res.json().catch(() => ({}))) as {
+		artifacts?: string;
+		figureAppendix?: string;
+		hasSavedFigures?: boolean;
+		error?: string;
+	};
+	if (!res.ok) {
+		throw new Error(data.error ?? `Visualization request failed (${res.status})`);
+	}
+	return {
+		artifacts: data.artifacts?.trim() ?? "",
+		figureAppendix: data.figureAppendix?.trim() ?? "",
+		hasSavedFigures: Boolean(data.hasSavedFigures),
+	};
 }
 
 export type ResearchTopicAnalysisDto = {
@@ -253,6 +315,7 @@ export async function fetchResearchIdeasFromApi(
 		disciplineLabel: string;
 		topic: string;
 		scope: ResearchScope;
+		sources?: ResearchSourceSelection;
 	},
 	options?: { signal?: AbortSignal },
 ): Promise<{ ideasMarkdown: string; analysis?: ResearchTopicAnalysisDto; tokenQuota?: StudentTokenQuota }> {
@@ -263,6 +326,7 @@ export async function fetchResearchIdeasFromApi(
 			disciplineLabel: input.disciplineLabel,
 			topic: input.topic,
 			scope: input.scope,
+			sources: input.sources,
 		}),
 		signal: options?.signal,
 	});

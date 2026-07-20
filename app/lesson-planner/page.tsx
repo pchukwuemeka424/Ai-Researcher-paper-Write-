@@ -4,7 +4,7 @@ import { LessonPlanner } from "@/components/LessonPlanner";
 
 export const metadata = {
 	title: "Lesson Planner",
-	description: "Generate a level-aligned university course outline from your title.",
+	description: "Create university course outlines, session plans, activity sheets, and assessment rubrics.",
 };
 
 export default function LessonPlannerPage() {

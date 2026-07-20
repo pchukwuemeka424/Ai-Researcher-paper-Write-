@@ -3,8 +3,15 @@ import {
 	getAlphaXivApiKey,
 	getAlphaXivMcpUrl,
 	isAlphaXivEnabled,
+	isPaperLibraryEnabled,
 } from "../config/env.js";
 import { searchArxivPapers } from "./arxiv.service.js";
+import {
+	libraryHasEnoughHits,
+	mergeUniquePapers,
+	searchPaperLibrary,
+	upsertPapersIntoLibrary,
+} from "./paper-library.service.js";
 import { searchTavilyPapers } from "./tavily.service.js";
 
 export type AlphaXivPaper = {
@@ -241,9 +248,18 @@ export function formatPapersForContext(
 	].join("\n");
 }
 
-export type PaperSearchSource = "alphaxiv" | "arxiv" | "alphaxiv-mcp" | "tavily" | "none";
+export type PaperSearchSource =
+	| "library"
+	| "hybrid"
+	| "alphaxiv"
+	| "arxiv"
+	| "alphaxiv-mcp"
+	| "tavily"
+	| "none";
 
 const PAPER_SOURCE_LABELS: Record<PaperSearchSource, string> = {
+	library: "Paper library (RAG)",
+	hybrid: "Paper library + live literature",
 	alphaxiv: "AlphaXiv",
 	arxiv: "arXiv",
 	"alphaxiv-mcp": "AlphaXiv MCP",
@@ -256,19 +272,16 @@ export type PaperSearchResult = {
 	source: PaperSearchSource;
 };
 
-export async function fetchPapersForQueryDetailed(
+async function fetchPapersFromExternalApis(
 	query: string,
 	options?: { limit?: number; signal?: AbortSignal },
 ): Promise<PaperSearchResult> {
-	const trimmed = query.trim();
-	if (!trimmed) return { papers: [], source: "none" };
-
 	let papers: AlphaXivPaper[] = [];
 	let source: PaperSearchSource = "none";
 
 	if (isAlphaXivEnabled()) {
 		try {
-			papers = await searchPapers(trimmed, options);
+			papers = await searchPapers(query, options);
 			if (papers.length > 0) source = "alphaxiv";
 		} catch {
 			/* fall through to arXiv / Tavily */
@@ -277,7 +290,7 @@ export async function fetchPapersForQueryDetailed(
 
 	if (papers.length === 0) {
 		try {
-			papers = await searchArxivPapers(trimmed, options);
+			papers = await searchArxivPapers(query, options);
 			if (papers.length > 0) source = "arxiv";
 		} catch {
 			/* fall through */
@@ -286,7 +299,7 @@ export async function fetchPapersForQueryDetailed(
 
 	if (papers.length === 0 && getAlphaXivApiKey()) {
 		try {
-			papers = await searchPapersViaMcp(trimmed, options);
+			papers = await searchPapersViaMcp(query, options);
 			if (papers.length > 0) source = "alphaxiv-mcp";
 		} catch {
 			/* fall through */
@@ -295,7 +308,7 @@ export async function fetchPapersForQueryDetailed(
 
 	if (papers.length === 0) {
 		try {
-			papers = await searchTavilyPapers(trimmed, options);
+			papers = await searchTavilyPapers(query, options);
 			if (papers.length > 0) source = "tavily";
 		} catch {
 			/* no papers */
@@ -303,6 +316,52 @@ export async function fetchPapersForQueryDetailed(
 	}
 
 	return { papers, source };
+}
+
+export async function fetchPapersForQueryDetailed(
+	query: string,
+	options?: { limit?: number; signal?: AbortSignal },
+): Promise<PaperSearchResult> {
+	const trimmed = query.trim();
+	if (!trimmed) return { papers: [], source: "none" };
+
+	const limit = options?.limit ?? DEFAULT_LIMIT;
+
+	/** 1) Library-first RAG — reuse previously retrieved publications. */
+	const libraryPapers = isPaperLibraryEnabled()
+		? await searchPaperLibrary(trimmed, { limit })
+		: [];
+
+	if (libraryHasEnoughHits(libraryPapers.length, limit)) {
+		return {
+			papers: libraryPapers.slice(0, limit),
+			source: "library",
+		};
+	}
+
+	/** 2) Live APIs when the local library does not cover the query. */
+	const external = await fetchPapersFromExternalApis(trimmed, { ...options, limit });
+
+	if (
+		external.source !== "none" &&
+		external.source !== "library" &&
+		external.source !== "hybrid" &&
+		external.papers.length > 0
+	) {
+		void upsertPapersIntoLibrary(external.papers, trimmed, external.source).catch(() => {
+			/* non-blocking library write */
+		});
+	}
+
+	if (libraryPapers.length === 0) {
+		return external;
+	}
+
+	const merged = mergeUniquePapers(libraryPapers, external.papers, limit);
+	return {
+		papers: merged,
+		source: external.papers.length > 0 ? "hybrid" : "library",
+	};
 }
 
 export async function fetchPapersForQuery(

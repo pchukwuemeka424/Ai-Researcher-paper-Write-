@@ -35,8 +35,13 @@ export function useFeynmanSocket(options: UseFeynmanSocketOptions = {}) {
 	const socketRef = useRef<WebSocket | null>(null);
 	const closingRef = useRef(false);
 	const draftIdRef = useRef<string | null>(null);
+	const reconnectTimerRef = useRef<number | null>(null);
+	const reconnectAttemptRef = useRef(0);
+	const enabledRef = useRef(enabled);
 	/** Topic to send as prompt after chat-paper workflow reset completes. */
 	const pendingPaperTopicRef = useRef<string | null>(null);
+
+	enabledRef.current = enabled;
 
 	const applyEvent = useCallback((payload: Record<string, unknown>) => {
 		if (payload.type === "status") {
@@ -107,46 +112,80 @@ export function useFeynmanSocket(options: UseFeynmanSocketOptions = {}) {
 		});
 	}, [setTokenQuota]);
 
+	const applyEventRef = useRef(applyEvent);
+	applyEventRef.current = applyEvent;
+
+	const clearReconnectTimer = useCallback(() => {
+		if (reconnectTimerRef.current != null) {
+			window.clearTimeout(reconnectTimerRef.current);
+			reconnectTimerRef.current = null;
+		}
+	}, []);
+
 	const connect = useCallback(() => {
+		if (!enabledRef.current) return;
+
 		closingRef.current = false;
+		clearReconnectTimer();
 		setStatus("connecting");
-		setError(null);
+		if (reconnectAttemptRef.current === 0) setError(null);
+
+		try {
+			socketRef.current?.close();
+		} catch {
+			/* ignore stale socket */
+		}
 
 		const ws = new WebSocket(wsUrl());
 		socketRef.current = ws;
 
 		ws.onopen = () => {
 			if (closingRef.current || socketRef.current !== ws) return;
+			reconnectAttemptRef.current = 0;
 			setStatus("connected");
 			setError(null);
 		};
 
 		ws.onclose = () => {
 			if (closingRef.current || socketRef.current !== ws) return;
-			setStatus("disconnected");
 			setIsBusy(false);
 			pendingPaperTopicRef.current = null;
+			setStatus("disconnected");
+
+			if (!enabledRef.current) return;
+			clearReconnectTimer();
+			const attempt = reconnectAttemptRef.current;
+			const delay = Math.min(1000 * 2 ** attempt, 15000);
+			reconnectAttemptRef.current = attempt + 1;
+			setError("WebSocket connection failed. Reconnecting…");
+			setStatus("connecting");
+			reconnectTimerRef.current = window.setTimeout(() => {
+				reconnectTimerRef.current = null;
+				connect();
+			}, delay);
 		};
 
 		ws.onerror = () => {
 			if (closingRef.current || socketRef.current !== ws) return;
 			setStatus("error");
-			setError("WebSocket connection failed.");
+			setError("WebSocket connection failed. Reconnecting…");
 		};
 
 		ws.onmessage = (event) => {
 			try {
 				const payload = JSON.parse(event.data) as Record<string, unknown>;
-				applyEvent(payload);
+				applyEventRef.current(payload);
 			} catch {
 				setError("Failed to parse server message.");
 			}
 		};
-	}, [applyEvent]);
+	}, [clearReconnectTimer]);
 
 	useEffect(() => {
 		if (!enabled) {
 			closingRef.current = true;
+			clearReconnectTimer();
+			reconnectAttemptRef.current = 0;
 			socketRef.current?.close();
 			socketRef.current = null;
 			setStatus("connecting");
@@ -154,13 +193,15 @@ export function useFeynmanSocket(options: UseFeynmanSocketOptions = {}) {
 			return;
 		}
 
+		reconnectAttemptRef.current = 0;
 		connect();
 		return () => {
 			closingRef.current = true;
+			clearReconnectTimer();
 			socketRef.current?.close();
 			socketRef.current = null;
 		};
-	}, [connect, enabled]);
+	}, [connect, enabled, clearReconnectTimer]);
 
 	const send = useCallback((type: string, body: Record<string, unknown> = {}) => {
 		if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {

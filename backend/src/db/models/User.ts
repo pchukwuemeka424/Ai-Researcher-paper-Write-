@@ -7,6 +7,10 @@ const userSchema = new Schema(
 		passwordHash: { type: String, select: false },
 		department: { type: String, trim: true },
 		institution: { type: String, trim: true },
+		/** Optional structured org dimensions for governance analytics */
+		faculty: { type: String, trim: true },
+		programme: { type: String, trim: true },
+		cohort: { type: String, trim: true },
 		role: {
 			type: String,
 			enum: ["lecturer", "admin", "viewer", "researcher", "student"],

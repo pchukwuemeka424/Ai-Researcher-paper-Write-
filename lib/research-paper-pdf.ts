@@ -72,10 +72,70 @@ const SECTION_HEADINGS = new Set([
 	"references",
 ]);
 
-type PdfBlock = {
-	kind: "title" | "section" | "body" | "byline" | "affiliation" | "rule" | "gap";
-	text?: string;
+/** Nigerian states — strip geographic "X State" from PDF (keep "X State University"). */
+const NIGERIA_STATE_NAMES = [
+	"Abia",
+	"Adamawa",
+	"Akwa Ibom",
+	"Anambra",
+	"Bauchi",
+	"Bayelsa",
+	"Benue",
+	"Borno",
+	"Cross River",
+	"Delta",
+	"Ebonyi",
+	"Edo",
+	"Ekiti",
+	"Enugu",
+	"Gombe",
+	"Imo",
+	"Jigawa",
+	"Kaduna",
+	"Kano",
+	"Katsina",
+	"Kebbi",
+	"Kogi",
+	"Kwara",
+	"Lagos",
+	"Nasarawa",
+	"Niger",
+	"Ogun",
+	"Ondo",
+	"Osun",
+	"Oyo",
+	"Plateau",
+	"Rivers",
+	"Sokoto",
+	"Taraba",
+	"Yobe",
+	"Zamfara",
+] as const;
+
+const NIGERIA_STATE_PATTERN = new RegExp(
+	`\\b(?:${NIGERIA_STATE_NAMES.map((name) => name.replace(/\s+/g, "\\s+")).join("|")})\\s+State\\b(?!\\s+University)`,
+	"gi",
+);
+
+type PdfChartSpec = {
+	type: "bar" | "line" | "area" | "pie" | "scatter";
+	title: string;
+	caption?: string;
+	xKey: string;
+	yKeys: string[];
+	data: Array<Record<string, string | number>>;
 };
+
+type PdfBlock =
+	| {
+			kind: "title" | "section" | "body" | "byline" | "affiliation";
+			text: string;
+	  }
+	| { kind: "rule" | "gap" }
+	| { kind: "table"; headers: string[]; rows: string[][] }
+	| { kind: "chart"; chart: PdfChartSpec }
+	| { kind: "image"; title: string; caption: string; nodes: string[]; edges: string[] }
+	| { kind: "figure"; title: string; caption: string; mime: string; dataUrl: string };
 
 type FontFace = "normal" | "bold" | "italic" | "bolditalic";
 
@@ -83,7 +143,28 @@ type JsPdfDoc = {
 	setFont: (face: string, style: FontFace) => void;
 	setFontSize: (size: number) => void;
 	getTextWidth: (text: string) => number;
-	text: (text: string, x: number, y: number) => void;
+	text: (
+		text: string,
+		x: number,
+		y: number,
+		options?: { maxWidth?: number; align?: "left" | "center" | "right" | "justify" },
+	) => void;
+	setTextColor: (r: number, g: number, b: number) => void;
+	setDrawColor: (r: number, g: number, b: number) => void;
+	setFillColor: (r: number, g: number, b: number) => void;
+	setLineWidth: (width: number) => void;
+	line: (x1: number, y1: number, x2: number, y2: number) => void;
+	rect: (x: number, y: number, width: number, height: number, style?: "S" | "F" | "FD") => void;
+	roundedRect: (
+		x: number,
+		y: number,
+		width: number,
+		height: number,
+		rx: number,
+		ry: number,
+		style?: "S" | "F" | "FD",
+	) => void;
+	circle: (x: number, y: number, radius: number, style?: "S" | "F" | "FD") => void;
 };
 
 /** Normalize punctuation that breaks PDF metrics in built-in fonts. */
@@ -135,6 +216,25 @@ export function collapseSpacedLetterRuns(text: string): string {
 	return out.join(" ");
 }
 
+/** Remove geographic "Abia State"-style phrases from PDF output. */
+export function stripGeographicStateNames(text: string): string {
+	let out = text
+		.replace(NIGERIA_STATE_PATTERN, "")
+		.replace(/\(\s*[,;]?\s*\)/g, "")
+		.replace(/\s*,\s*,+/g, ",")
+		.replace(/\s+([,;:.])/g, "$1")
+		.replace(/([,;])\s*(?=[,;])/g, "")
+		.replace(/\b(in|at|of|from|within)\s*,\s*/gi, "$1 ")
+		.replace(/\b(in|at|of|from|within)\s*\.(?=\s|$)/gi, ".")
+		.replace(/^[,\s;]+|[,\s;]+$/g, "")
+		.replace(/\s{2,}/g, " ")
+		.trim();
+
+	// Drop labels left empty after stripping a location (e.g. "Study area: Abia State").
+	out = out.replace(/^study\s*area\s*:?\s*$/i, "").trim();
+	return out;
+}
+
 export function normalizePdfText(raw: string): string {
 	let text = raw
 		.replace(UNICODE_SPACES, " ")
@@ -148,6 +248,7 @@ export function normalizePdfText(raw: string): string {
 
 	text = normalizePdfPunctuation(text);
 	text = collapseSpacedLetterRuns(text);
+	text = stripGeographicStateNames(text);
 	text = toAsciiSafePdfText(text);
 
 	// Break only extremely long unbroken tokens (URLs).
@@ -290,6 +391,26 @@ function buildBlocks(markdown: string, meta: ResearchPaperMeta): PdfBlock[] {
 
 		if (token.type === "paragraph") {
 			const p = token as Tokens.Paragraph;
+			const looseTableLines = p.raw
+				.split(/\n/)
+				.map((line) => line.trim())
+				.filter((line) => line.split("|").length >= 3);
+			if (looseTableLines.length >= 2) {
+				const cells = (line: string) =>
+					line
+						.replace(/^\||\|$/g, "")
+						.split("|")
+						.map((cell) => normalizePdfText(cell));
+				const headers = cells(looseTableLines[0]!);
+				const rows = looseTableLines
+					.slice(1)
+					.map(cells)
+					.filter((row) => row.length === headers.length);
+				if (headers.length >= 2 && rows.length) {
+					blocks.push({ kind: "table", headers, rows });
+					continue;
+				}
+			}
 			const text = flattenTokens(p.tokens);
 			if (!text || shouldSkipMetadataLine(text, skipKeys, extractedTitle)) continue;
 
@@ -322,12 +443,132 @@ function buildBlocks(markdown: string, meta: ResearchPaperMeta): PdfBlock[] {
 			continue;
 		}
 
+		if (token.type === "table") {
+			const table = token as Tokens.Table;
+			const rowValues = (cells: Tokens.TableCell[]) =>
+				cells.map((cell) => flattenTokens(cell.tokens));
+			blocks.push({
+				kind: "table",
+				headers: rowValues(table.header),
+				rows: table.rows.map(rowValues),
+			});
+			continue;
+		}
+
+		if (token.type === "code" && (token as Tokens.Code).lang?.toLowerCase() === "research-chart") {
+			try {
+				const chart = JSON.parse((token as Tokens.Code).text) as {
+					type?: PdfChartSpec["type"];
+					title?: string;
+					caption?: string;
+					xKey?: string;
+					yKeys?: string[];
+					data?: Array<Record<string, string | number>>;
+				};
+				const validTypes = new Set<PdfChartSpec["type"]>(["bar", "line", "area", "pie", "scatter"]);
+				if (
+					chart.type &&
+					validTypes.has(chart.type) &&
+					chart.xKey &&
+					chart.yKeys?.length &&
+					chart.data?.length
+				) {
+					blocks.push({
+						kind: "chart",
+						chart: {
+							type: chart.type,
+							title: chart.title?.trim() || "Research data visualization",
+							caption: chart.caption?.trim(),
+							xKey: chart.xKey,
+							yKeys: chart.yKeys.slice(0, 5),
+							data: chart.data.slice(0, 30),
+						},
+					});
+				}
+			} catch {
+				/* Ignore an incomplete chart block while streaming. */
+			}
+			continue;
+		}
+
+		if (token.type === "code" && (token as Tokens.Code).lang?.toLowerCase() === "research-image") {
+			try {
+				const image = JSON.parse((token as Tokens.Code).text) as {
+					title?: string;
+					caption?: string;
+					nodes?: Array<{ id?: string; label?: string }>;
+					edges?: Array<{ from?: string; to?: string; label?: string }>;
+				};
+				blocks.push({
+					kind: "image",
+					title: image.title?.trim() || "Conceptual illustration",
+					caption: image.caption?.trim() || "AI-generated conceptual illustration.",
+					nodes: (image.nodes ?? [])
+						.map((node) => node.label?.trim() ?? "")
+						.filter(Boolean)
+						.slice(0, 9),
+					edges: (image.edges ?? [])
+						.filter((edge) => edge.from && edge.to)
+						.map((edge) => `${edge.from} → ${edge.to}${edge.label ? `: ${edge.label}` : ""}`)
+						.slice(0, 12),
+				});
+			} catch {
+				/* Ignore an incomplete image block while streaming. */
+			}
+			continue;
+		}
+
+		if (token.type === "code" && (token as Tokens.Code).lang?.toLowerCase() === "research-figure") {
+			try {
+				const figure = JSON.parse((token as Tokens.Code).text) as {
+					title?: string;
+					caption?: string;
+					mime?: string;
+					dataUrl?: string;
+				};
+				const dataUrl = figure.dataUrl?.trim() ?? "";
+				if (dataUrl.startsWith("data:image/")) {
+					blocks.push({
+						kind: "figure",
+						title: figure.title?.trim() || "Research figure",
+						caption: figure.caption?.trim() || "From research note Figures.",
+						mime: figure.mime?.trim() || "image/png",
+						dataUrl,
+					});
+				}
+			} catch {
+				/* Ignore an incomplete figure block while streaming. */
+			}
+			continue;
+		}
+
 		if (token.type === "space") {
 			blocks.push({ kind: "gap" });
 		}
 	}
 
-	return blocks;
+	return pruneEmptyStudyAreaSections(blocks);
+}
+
+/** Drop a Study area heading when its body was only a geographic state name. */
+function pruneEmptyStudyAreaSections(blocks: PdfBlock[]): PdfBlock[] {
+	const out: PdfBlock[] = [];
+	for (let i = 0; i < blocks.length; i++) {
+		const block = blocks[i]!;
+		if (block.kind === "section" && /^study\s*area$/i.test(block.text.trim())) {
+			const next = blocks[i + 1];
+			const hasBody =
+				next &&
+				((next.kind === "body" && normalizePdfText(next.text).length > 0) ||
+					next.kind === "table" ||
+					next.kind === "chart" ||
+					next.kind === "image" ||
+					next.kind === "figure");
+			if (!hasBody) continue;
+		}
+		out.push(block);
+	}
+	return out;
 }
 
 function inlineTokensOf(blockTokens: Token[] | undefined): Token[] {
@@ -394,21 +635,44 @@ export async function renderResearchPaperPdf(
 		factor: number,
 		x: number,
 		color: [number, number, number] = COLOR.text,
+		align: "left" | "justify" = "left",
+		lineMaxWidth = maxWidth,
 	) => {
 		doc.setFont(FONT, face);
 		doc.setFontSize(size);
 		doc.setTextColor(...color);
 		const lh = lineHeight(size, factor);
-		for (const line of lines) {
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i]!;
 			ensure(lh);
-			doc.text(line, x, y);
+			const words = line.split(/\s+/).filter(Boolean);
+			const justify = align === "justify" && i < lines.length - 1 && words.length > 1;
+			if (justify) {
+				const wordsWidth = words.reduce((sum, word) => sum + doc.getTextWidth(word), 0);
+				const gap = (lineMaxWidth - wordsWidth) / (words.length - 1);
+				let cursor = x;
+				for (const word of words) {
+					doc.text(word, cursor, y);
+					cursor += doc.getTextWidth(word) + gap;
+				}
+			} else {
+				doc.text(line, x, y);
+			}
 			y += lh;
 		}
 	};
 
-	const drawLeft = (text: string, size: number, face: FontFace, factor: number, indent = 0) => {
-		const lines = wrapLines(doc, text, maxWidth - indent, FONT, face, size);
-		drawLines(lines, size, face, factor, PAGE.left + indent);
+	const drawLeft = (
+		text: string,
+		size: number,
+		face: FontFace,
+		factor: number,
+		indent = 0,
+		align: "left" | "justify" = "left",
+	) => {
+		const width = maxWidth - indent;
+		const lines = wrapLines(doc, text, width, FONT, face, size);
+		drawLines(lines, size, face, factor, PAGE.left + indent, COLOR.text, align, width);
 	};
 
 	const drawCenter = (
@@ -431,10 +695,242 @@ export async function renderResearchPaperPdf(
 		}
 	};
 
+	const drawTable = (headers: string[], rows: string[][]) => {
+		if (!headers.length) return;
+		const columnCount = Math.min(headers.length, 12);
+		const columnWidth = maxWidth / columnCount;
+		const fontSize = columnCount > 8 ? 6.5 : columnCount > 5 ? 7.5 : 8.5;
+		const padding = 3;
+		const cellLines = (value: string) =>
+			wrapLines(doc, normalizePdfText(value), columnWidth - padding * 2, FONT, "normal", fontSize);
+		const rowHeight = (values: string[]) =>
+			Math.max(
+				fontSize * 1.35 + padding * 2,
+				...values.slice(0, columnCount).map((value) => cellLines(value).length * fontSize * 1.25 + padding * 2),
+			);
+		const drawRow = (values: string[], header = false) => {
+			const height = rowHeight(values);
+			doc.setFont(FONT, header ? "bold" : "normal");
+			doc.setFontSize(fontSize);
+			for (let column = 0; column < columnCount; column++) {
+				const x = PAGE.left + column * columnWidth;
+				if (header) {
+					doc.setFillColor(235, 238, 245);
+					doc.rect(x, y, columnWidth, height, "F");
+				}
+				doc.setDrawColor(175, 180, 190);
+				doc.rect(x, y, columnWidth, height, "S");
+				doc.setTextColor(...COLOR.text);
+				const lines = cellLines(values[column] ?? "");
+				lines.forEach((line, lineIndex) => {
+					doc.text(line, x + padding, y + padding + fontSize + lineIndex * fontSize * 1.25);
+				});
+			}
+			y += height;
+		};
+		const addTablePage = () => {
+			doc.addPage();
+			y = PAGE.top;
+			drawRow(headers, true);
+		};
+
+		const headerHeight = rowHeight(headers);
+		if (y + headerHeight > pageH - PAGE.bottom) {
+			doc.addPage();
+			y = PAGE.top;
+		}
+		drawRow(headers, true);
+		for (const row of rows.slice(0, 40)) {
+			const height = rowHeight(row);
+			if (y + height > pageH - PAGE.bottom) addTablePage();
+			drawRow(row);
+		}
+		y += 10;
+	};
+
+	const drawChart = (chart: PdfChartSpec) => {
+		const yKey = chart.yKeys[0];
+		if (!yKey) return;
+		const values = chart.data
+			.map((row) => ({
+				label: String(row[chart.xKey] ?? ""),
+				value: Number(row[yKey]),
+			}))
+			.filter((item) => Number.isFinite(item.value))
+			.slice(0, 16);
+		if (!values.length) return;
+
+		const chartHeight = 220;
+		ensure(chartHeight + 55);
+		drawCenter(`Figure: ${chart.title}`, 10, "bold", 1.25);
+		y += 6;
+		const plotX = PAGE.left + 42;
+		const plotY = y;
+		const plotWidth = maxWidth - 54;
+		const plotHeight = 150;
+		const minValue = Math.min(0, ...values.map((item) => item.value));
+		const maxValue = Math.max(0, ...values.map((item) => item.value));
+		const range = maxValue - minValue || 1;
+		const valueY = (value: number) => plotY + plotHeight - ((value - minValue) / range) * plotHeight;
+		const zeroY = valueY(0);
+
+		doc.setDrawColor(90, 100, 115);
+		doc.setLineWidth(0.8);
+		doc.line(plotX, plotY, plotX, plotY + plotHeight);
+		doc.line(plotX, zeroY, plotX + plotWidth, zeroY);
+		doc.setFont(FONT, "normal");
+		doc.setFontSize(6.5);
+		doc.setTextColor(...COLOR.muted);
+		doc.text(normalizePdfText(String(maxValue)), PAGE.left, plotY + 5);
+		doc.text(normalizePdfText(String(minValue)), PAGE.left, plotY + plotHeight);
+
+		const colors: Array<[number, number, number]> = [
+			[79, 70, 229],
+			[8, 145, 178],
+			[5, 150, 105],
+			[217, 119, 6],
+			[220, 38, 38],
+		];
+		const step = plotWidth / Math.max(values.length, 1);
+		const points = values.map((item, index) => ({
+			x: plotX + step * index + step / 2,
+			y: valueY(item.value),
+			...item,
+		}));
+
+		if (chart.type === "line" || chart.type === "area" || chart.type === "scatter") {
+			points.forEach((point, index) => {
+				const color = colors[index % colors.length]!;
+				doc.setFillColor(...color);
+				doc.circle(point.x, point.y, 2.5, "F");
+				if (chart.type !== "scatter" && index > 0) {
+					const previous = points[index - 1]!;
+					doc.setDrawColor(79, 70, 229);
+					doc.setLineWidth(1.5);
+					doc.line(previous.x, previous.y, point.x, point.y);
+				}
+			});
+		} else {
+			const barWidth = Math.max(5, step * 0.62);
+			points.forEach((point, index) => {
+				const color = colors[index % colors.length]!;
+				doc.setFillColor(...color);
+				const top = Math.min(point.y, zeroY);
+				doc.rect(point.x - barWidth / 2, top, barWidth, Math.max(1, Math.abs(zeroY - point.y)), "F");
+			});
+		}
+
+		doc.setFontSize(6);
+		points.forEach((point) => {
+			const label = normalizePdfText(point.label).slice(0, 12);
+			const width = doc.getTextWidth(label);
+			doc.text(label, point.x - width / 2, plotY + plotHeight + 10);
+		});
+		y = plotY + plotHeight + 22;
+		if (chart.caption) {
+			drawCenter(chart.caption, 8, "italic", 1.25, COLOR.muted);
+		}
+		y += 12;
+	};
+
+	const drawConceptImage = (block: Extract<PdfBlock, { kind: "image" }>) => {
+		if (!block.nodes.length) return;
+		const rows = Math.ceil(block.nodes.length / 3);
+		const figureHeight = 55 + rows * 78;
+		ensure(figureHeight + 40);
+		drawCenter(`Figure: ${block.title}`, 10, "bold", 1.25);
+		y += 8;
+		const top = y;
+		const boxWidth = (maxWidth - 24) / 3;
+		const boxHeight = 48;
+		block.nodes.forEach((node, index) => {
+			const column = index % 3;
+			const row = Math.floor(index / 3);
+			const x = PAGE.left + column * (boxWidth + 12);
+			const boxY = top + row * 78;
+			doc.setFillColor(239, 242, 255);
+			doc.setDrawColor(79, 70, 229);
+			doc.roundedRect(x, boxY, boxWidth, boxHeight, 6, 6, "FD");
+			const lines = wrapLines(doc, node, boxWidth - 12, FONT, "bold", 8);
+			doc.setFont(FONT, "bold");
+			doc.setFontSize(8);
+			lines.slice(0, 3).forEach((line, lineIndex) => {
+				const lineWidth = doc.getTextWidth(line);
+				doc.text(line, x + (boxWidth - lineWidth) / 2, boxY + 18 + lineIndex * 10);
+			});
+			if (index < block.nodes.length - 1) {
+				const nextColumn = (index + 1) % 3;
+				if (nextColumn !== 0) {
+					doc.setDrawColor(100, 116, 139);
+					doc.line(x + boxWidth, boxY + boxHeight / 2, x + boxWidth + 10, boxY + boxHeight / 2);
+				}
+			}
+		});
+		y = top + rows * 78;
+		drawCenter(block.caption, 8, "italic", 1.25, COLOR.muted);
+		y += 12;
+	};
+
+	const drawRasterFigure = (block: Extract<PdfBlock, { kind: "figure" }>) => {
+		const match = /^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/i.exec(block.dataUrl);
+		if (!match) {
+			drawCenter(`Figure: ${block.title}`, 10, "bold", 1.25);
+			drawCenter(block.caption, 8, "italic", 1.25, COLOR.muted);
+			y += 8;
+			return;
+		}
+		const formatRaw = match[1]!.toLowerCase();
+		const format =
+			formatRaw.includes("jpeg") || formatRaw.includes("jpg")
+				? "JPEG"
+				: formatRaw.includes("webp")
+					? "WEBP"
+					: "PNG";
+		const base64 = match[2]!;
+		const maxH = 280;
+		ensure(maxH + 50);
+		drawCenter(`Figure: ${block.title}`, 10, "bold", 1.25);
+		y += 6;
+		try {
+			const props = (
+				doc as unknown as {
+					getImageProperties: (data: string) => { width: number; height: number };
+				}
+			).getImageProperties(block.dataUrl);
+			const ratio = props.width > 0 ? props.height / props.width : 0.75;
+			let w = maxWidth;
+			let h = w * ratio;
+			if (h > maxH) {
+				h = maxH;
+				w = h / Math.max(ratio, 0.01);
+			}
+			const x = PAGE.left + (maxWidth - w) / 2;
+			(
+				doc as unknown as {
+					addImage: (
+						data: string,
+						format: string,
+						x: number,
+						y: number,
+						w: number,
+						h: number,
+					) => void;
+				}
+			).addImage(block.dataUrl, format, x, y, w, h);
+			y += h + 8;
+			void base64;
+		} catch {
+			drawCenter("[Figure image could not be embedded]", 9, "italic", 1.25, COLOR.muted);
+			y += 8;
+		}
+		drawCenter(block.caption, 8, "italic", 1.25, COLOR.muted);
+		y += 12;
+	};
+
 	const blocks = buildBlocks(markdown, meta);
 
 	for (const block of blocks) {
-		const text = block.text ? normalizePdfText(block.text) : "";
+		const text = "text" in block ? normalizePdfText(block.text) : "";
 		switch (block.kind) {
 			case "title":
 				drawCenter(text, SIZE.title, "bold", LEADING.title);
@@ -461,11 +957,23 @@ export async function renderResearchPaperPdf(
 				y += 4;
 				break;
 			case "body":
-				drawLeft(text, SIZE.body, "normal", LEADING.body);
+				drawLeft(text, SIZE.body, "normal", LEADING.body, 0, "justify");
 				y += 6;
 				break;
 			case "gap":
 				y += 8;
+				break;
+			case "table":
+				drawTable(block.headers, block.rows);
+				break;
+			case "chart":
+				drawChart(block.chart);
+				break;
+			case "image":
+				drawConceptImage(block);
+				break;
+			case "figure":
+				drawRasterFigure(block);
 				break;
 		}
 	}

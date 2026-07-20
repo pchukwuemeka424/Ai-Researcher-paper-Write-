@@ -1,6 +1,6 @@
 {
   "name": "feynman-web",
-  "description": "Feynman web UI (Next.js)",
+  "description": "Governed AI for Higher Institutions (GAHI) web UI (Next.js)",
   "private": true,
   "version": "0.0.1",
   "scripts": {
@@ -14,18 +14,37 @@
     "test:pdf": "npx tsx scripts/test-research-pdf-runner.ts"
   },
   "dependencies": {
+    "@sgratzl/chartjs-chart-boxplot": "^4.4.5",
+    "@supabase/supabase-js": "^2.110.7",
+    "@tiptap/extension-image": "^3.28.0",
+    "@tiptap/pm": "^3.28.0",
+    "@tiptap/react": "^3.28.0",
+    "@tiptap/starter-kit": "^3.28.0",
+    "chart.js": "^4.5.1",
+    "docx": "^9.7.1",
     "html2canvas": "^1.4.1",
+    "idb": "^8.0.3",
     "jspdf": "^3.0.1",
+    "jstat": "^1.9.6",
+    "mammoth": "^1.12.0",
     "marked": "^15.0.12",
     "next": "^16.2.6",
+    "pptxgenjs": "^4.0.1",
     "react": "^19.2.6",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.6",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "recharts": "^2.15.4",
+    "remark-gfm": "^4.0.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.19.19",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "postcss": "^8.5.20",
+    "tailwindcss": "^4.3.3",
     "typescript": "~5.9.3"
   },
   "packageManager": "pnpm@11.5.1+sha512.93f7b57422ea7068257235b4c16eb60762eb68e1dc23723199cc739043ea9be2c4143274a399d8c6defa2b1176226d9ca1c4b63482d6200c1a8fbaa78c1d1485"

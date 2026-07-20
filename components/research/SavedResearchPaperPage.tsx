@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
 
 import { AulaLayout } from "@/components/AulaLayout";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ResearchDocEditor } from "@/components/research/ResearchDocEditor";
+import { ResearchPaperMarkdown } from "@/components/research/ResearchPaperMarkdown";
 import { StudentLayout } from "@/components/StudentLayout";
 import {
 	IconDownload,
@@ -23,8 +24,9 @@ import {
 	updateSavedResearchPaper,
 	type SavedResearchPaper,
 } from "@/lib/chat-research-storage";
-import { savedResearchListPath } from "@/lib/saved-research-routes";
+import { htmlToOutlineText, markdownToDocHtml } from "@/lib/research-ideas";
 import { formatResearchPaperReferences } from "@/lib/research-paper-references";
+import { savedResearchListPath } from "@/lib/saved-research-routes";
 
 type ViewMode = "preview" | "edit";
 
@@ -52,9 +54,10 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 	const [paper, setPaper] = useState<SavedResearchPaper | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [notFound, setNotFound] = useState(false);
-	const [mode, setMode] = useState<ViewMode>("preview");
+	const [mode, setMode] = useState<ViewMode>("edit");
 	const [topic, setTopic] = useState("");
 	const [content, setContent] = useState("");
+	const [editorHtml, setEditorHtml] = useState("");
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -64,7 +67,7 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 
 	const researchPath = isStudent ? "/student/research" : "/research";
 	const savedListPath = savedResearchListPath(variant);
-	const workspacePath = isStudent ? "/student/research/paper" : "/dashboard/chat";
+	const workspacePath = isStudent ? "/student/research/paper" : "/research/paper";
 
 	useEffect(() => {
 		if (!id) {
@@ -83,7 +86,9 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 				setPaper(loaded);
 				setTopic(loaded.topic);
 				setContent(loaded.content);
+				setEditorHtml(markdownToDocHtml(loaded.content));
 				setDirty(false);
+				setMode("edit");
 			}
 			setLoading(false);
 		});
@@ -105,11 +110,18 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 		[user?.name, user?.department, user?.institution, topic],
 	);
 
+	const syncContentFromHtml = useCallback((html: string) => {
+		setEditorHtml(html);
+		setContent(htmlToOutlineText(html));
+		setDirty(true);
+	}, []);
+
 	const handleSave = useCallback(async () => {
 		if (!id || !dirty) return;
+		const nextContent = htmlToOutlineText(editorHtml);
 		setSaving(true);
 		setError(null);
-		const result = await updateSavedResearchPaper(id, { topic, content });
+		const result = await updateSavedResearchPaper(id, { topic, content: nextContent });
 		setSaving(false);
 		if (!result.paper) {
 			setError(result.error ?? "Could not save changes.");
@@ -118,25 +130,27 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 		setPaper(result.paper);
 		setTopic(result.paper.topic);
 		setContent(result.paper.content);
+		setEditorHtml(markdownToDocHtml(result.paper.content));
 		setDirty(false);
 		setNotice("Changes saved.");
 		window.setTimeout(() => setNotice(null), 4000);
-	}, [id, dirty, topic, content]);
+	}, [id, dirty, topic, editorHtml]);
 
 	const handleDownload = useCallback(() => {
-		if (!content.trim()) return;
+		const nextContent = htmlToOutlineText(editorHtml) || content;
+		if (!nextContent.trim()) return;
 		void downloadResearchPaper(
 			{
 				id: id ?? "",
 				topic,
 				title: displayTitle,
-				content,
+				content: nextContent,
 				createdAt: paper?.createdAt ?? new Date().toISOString(),
 				updatedAt: paper?.updatedAt ?? new Date().toISOString(),
 			},
 			paperMeta,
 		);
-	}, [content, displayTitle, id, paper?.createdAt, paper?.updatedAt, paperMeta, topic]);
+	}, [content, displayTitle, editorHtml, id, paper?.createdAt, paper?.updatedAt, paperMeta, topic]);
 
 	const handleDelete = useCallback(async () => {
 		if (!id) return;
@@ -150,6 +164,11 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 		}
 		router.push(researchPath);
 	}, [id, paper, researchPath, router]);
+
+	const enterEditMode = useCallback(() => {
+		setEditorHtml(markdownToDocHtml(content));
+		setMode("edit");
+	}, [content]);
 
 	const btnClass = isStudent ? "stu-paper-btn" : "saved-research-btn";
 	const btnPrimaryClass = isStudent
@@ -201,20 +220,23 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 							role="tab"
 							className={`saved-research-mode-btn${mode === "preview" ? " active" : ""}`}
 							aria-selected={mode === "preview"}
-							onClick={() => setMode("preview")}
+							onClick={() => {
+								setContent(htmlToOutlineText(editorHtml) || content);
+								setMode("preview");
+							}}
 						>
 							<IconFileText size={14} />
-							Preview
+							Reading view
 						</button>
 						<button
 							type="button"
 							role="tab"
 							className={`saved-research-mode-btn${mode === "edit" ? " active" : ""}`}
 							aria-selected={mode === "edit"}
-							onClick={() => setMode("edit")}
+							onClick={enterEditMode}
 						>
 							<IconEdit size={14} />
-							Edit
+							Editable document
 						</button>
 					</div>
 					<button
@@ -250,9 +272,9 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 				</div>
 			)}
 
-			<div className="saved-research-card">
+			<div className={`saved-research-card${mode === "edit" ? " saved-research-card-doc" : ""}`}>
 				{mode === "edit" ? (
-					<div className="saved-research-edit">
+					<div className="saved-research-edit saved-research-edit-doc">
 						<label className="saved-research-field-label" htmlFor="saved-research-topic">
 							Research topic
 						</label>
@@ -265,33 +287,25 @@ function SavedResearchPaperContent({ variant = "lecturer" }: Props) {
 								setDirty(true);
 							}}
 						/>
-						<label className="saved-research-field-label" htmlFor="saved-research-content">
-							Paper content (Markdown)
-						</label>
-						<textarea
-							id="saved-research-content"
-							className="saved-research-editor"
-							value={content}
-							onChange={(event) => {
-								setContent(event.target.value);
-								setDirty(true);
+						<p className="saved-research-field-label">Standard editable document</p>
+						<ResearchDocEditor
+							value={editorHtml}
+							placeholder="Edit your research paper like a Word document…"
+							ariaLabel="Editable research paper document"
+							minHeight="36rem"
+							onChange={syncContentFromHtml}
+							onBlur={() => {
+								const next = htmlToOutlineText(editorHtml);
+								if (next !== content) {
+									setContent(next);
+									setDirty(true);
+								}
 							}}
-							spellCheck
 						/>
 					</div>
 				) : (
 					<div className="saved-research-preview research-markdown-panel">
-						<ReactMarkdown
-							components={{
-								a: ({ href, children }) => (
-									<a href={href} target="_blank" rel="noopener noreferrer">
-										{children}
-									</a>
-								),
-							}}
-						>
-							{formattedContent || content}
-						</ReactMarkdown>
+						<ResearchPaperMarkdown content={formattedContent || content} />
 					</div>
 				)}
 			</div>

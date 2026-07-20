@@ -318,3 +318,167 @@ export function IconMoveRight(props: Props) {
 		</svg>
 	);
 }
+
+export function IconUpload(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M12 16V4M8 8l4-4 4 4M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
+export function IconFolder(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
+export function IconPlus(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M12 5v14M5 12h14" strokeLinecap="round" />
+		</svg>
+	);
+}
+
+export function IconTable(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<rect x="3" y="4" width="18" height="16" rx="2" />
+			<path d="M3 10h18M3 14h18M9 4v16M15 4v16" strokeLinecap="round" />
+		</svg>
+	);
+}
+
+export function IconBraces(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M8 4H6.5A2.5 2.5 0 0 0 4 6.5v3A1.5 1.5 0 0 1 2.5 11 1.5 1.5 0 0 1 4 12.5v3A2.5 2.5 0 0 0 6.5 18H8" strokeLinecap="round" />
+			<path d="M16 4h1.5A2.5 2.5 0 0 1 20 6.5v3A1.5 1.5 0 0 0 21.5 11 1.5 1.5 0 0 0 20 12.5v3A2.5 2.5 0 0 1 17.5 18H16" strokeLinecap="round" />
+		</svg>
+	);
+}
+
+export function IconArchive(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<rect x="3" y="4" width="18" height="5" rx="1" />
+			<path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" strokeLinecap="round" />
+		</svg>
+	);
+}
+
+export function IconDatabase(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<ellipse cx="12" cy="5" rx="8" ry="3" />
+			<path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+		</svg>
+	);
+}
+
+export function IconStickyNote(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9z" strokeLinejoin="round" />
+			<path d="M15 3v6h6M9 13h6M9 17h4" strokeLinecap="round" />
+		</svg>
+	);
+}
+
+export function IconChartBar(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
+export function IconChartLine(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+			<path d="M7 14l4-4 3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
+export function IconChartArea(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+			<path
+				d="M7 16l4-5 3 2 6-7v10H7z"
+				strokeLinejoin="round"
+				fill="currentColor"
+				fillOpacity="0.12"
+			/>
+		</svg>
+	);
+}
+
+export function IconChartPie(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M21.21 15.89A10 10 0 1 1 8 2.83" strokeLinecap="round" strokeLinejoin="round" />
+			<path d="M22 12A10 10 0 0 0 12 2v10z" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
+export function IconChartScatter(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+			<circle cx="8" cy="14" r="1.5" fill="currentColor" stroke="none" />
+			<circle cx="12" cy="9" r="1.5" fill="currentColor" stroke="none" />
+			<circle cx="16" cy="13" r="1.5" fill="currentColor" stroke="none" />
+			<circle cx="18.5" cy="7" r="1.5" fill="currentColor" stroke="none" />
+		</svg>
+	);
+}
+
+export function IconSliders(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" strokeLinecap="round" />
+			<path d="M1 14h6M9 8h6M17 16h6" strokeLinecap="round" />
+		</svg>
+	);
+}
+
+export function IconLibrary(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" strokeLinecap="round" strokeLinejoin="round" />
+			<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
+export function IconFileSpreadsheet(props: Props) {
+	const p = svgProps(props);
+	return (
+		<svg {...p}>
+			<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinejoin="round" />
+			<path d="M14 2v6h6M8 13h8M8 17h8M10 9h1" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
+	);
+}

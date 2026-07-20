@@ -9,6 +9,8 @@ export type SavedResearchIdeaDto = {
 	title: string;
 	rationale: string;
 	approach: string;
+	outline?: string;
+	researchQuestions?: string[];
 	type: string;
 	feasibility: string;
 	discipline: string;
@@ -26,6 +28,8 @@ function toDto(doc: {
 	title: string;
 	rationale: string;
 	approach: string;
+	outline?: string | null;
+	researchQuestions?: string[] | null;
 	type: string;
 	feasibility: string;
 	discipline: string;
@@ -41,6 +45,8 @@ function toDto(doc: {
 		title: doc.title,
 		rationale: doc.rationale,
 		approach: doc.approach,
+		...(doc.outline?.trim() ? { outline: doc.outline } : {}),
+		...(doc.researchQuestions?.length ? { researchQuestions: doc.researchQuestions } : {}),
 		type: doc.type,
 		feasibility: doc.feasibility,
 		discipline: doc.discipline,
@@ -80,6 +86,8 @@ export async function saveResearchIdea(
 		discipline: string;
 		topic: string;
 		status?: "saved" | "in_progress" | "completed";
+		outline?: string;
+		researchQuestions?: string[];
 	},
 ): Promise<SavedResearchIdeaDto> {
 	const filter = {
@@ -96,6 +104,8 @@ export async function saveResearchIdea(
 		existing.feasibility = input.feasibility;
 		existing.discipline = input.discipline.trim();
 		existing.topic = input.topic.trim();
+		if (input.outline !== undefined) existing.outline = input.outline.trim();
+		if (input.researchQuestions !== undefined) existing.researchQuestions = input.researchQuestions;
 		if (input.status) existing.status = input.status;
 		await existing.save();
 		return toDto(existing);
@@ -112,6 +122,8 @@ export async function saveResearchIdea(
 		discipline: input.discipline.trim(),
 		topic: input.topic.trim(),
 		status: input.status ?? "saved",
+		...(input.outline?.trim() ? { outline: input.outline.trim() } : {}),
+		...(input.researchQuestions?.length ? { researchQuestions: input.researchQuestions } : {}),
 	});
 	return toDto(created);
 }

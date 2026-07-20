@@ -5,9 +5,11 @@ export function getBackendOrigin(): string {
 	if (typeof window === "undefined") return "";
 	const env = process.env.NEXT_PUBLIC_FEYNMAN_BACKEND?.trim();
 	if (env) return env.replace(/\/$/, "");
-	// In dev, Next.js rewrites proxy /api and /ws to the backend on :3141.
+	// Dev: call the API directly so long LLM requests aren't killed by Next's ~30s rewrite proxy.
 	if (process.env.NODE_ENV === "development") {
-		return "";
+		const host = window.location.hostname || "127.0.0.1";
+		const backendHost = host === "localhost" ? "127.0.0.1" : host;
+		return `http://${backendHost}:3141`;
 	}
 	return "";
 }

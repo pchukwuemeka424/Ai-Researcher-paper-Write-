@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 
+import { CitationStyleSelect } from "@/components/aula/CitationStyleSelect";
 import { DisciplineSelect } from "@/components/aula/DisciplineSelect";
 import { ResearchScopeSelect } from "@/components/aula/ResearchScopeSelect";
 import { NavIcon } from "@/components/aula/NavIcon";
@@ -22,11 +23,11 @@ import {
 	IconDashboard,
 	IconDownload,
 	IconEdit,
+	IconFileText,
 	IconFilter,
 	IconGraduationCap,
 	IconGrid,
 	IconLayers,
-	IconLightbulb,
 	IconMarkdown,
 	IconMicroscope,
 	IconRefresh,
@@ -41,8 +42,19 @@ import { StudentLayout } from "@/components/StudentLayout";
 import { studentHasResearchTokens } from "@/components/StudentTokenQuota";
 import { useAuth } from "@/hooks/useAuth";
 import { useFeynmanSocket } from "@/hooks/useFeynmanSocket";
+import { saveChatCitationStyle } from "@/lib/chat-research-citations";
+import { getStyleLabel, type CitationStyle } from "@/lib/citation-styles";
+import {
+	fetchDocuments,
+	fetchNotebook,
+	fetchProjects,
+	type ResearchDocument,
+	type ResearchProject,
+	type ResearchSourceSelection,
+} from "@/lib/research-assets-api";
 import { fetchResearchIdeasFromApi } from "@/lib/research-api";
-import { DEFAULT_DISCIPLINE, getDisciplineLabel } from "@/lib/research-disciplines";
+import { getDisciplineLabel } from "@/lib/research-disciplines";
+import { researchPaperWorkspacePath } from "@/lib/research-generate-routes";
 import {
 	buildResearchIdeasPrompt,
 	FOCUS_OPTIONS,
@@ -58,13 +70,14 @@ import {
 	type ResearchSession,
 	type ResearchTopicAnalysis,
 } from "@/lib/research-ideas";
+import { stageOutlinePageContext } from "@/lib/research-outline-context";
 import {
 	STRONG_TOPIC_EXAMPLES,
 	TOPIC_INPUT_HINT,
-	VAGUE_TOPIC_EXAMPLES,
 } from "@/lib/research-topic-guidance";
 import { loadAllSavedPapers, type SavedResearchPaper } from "@/lib/chat-research-storage";
 import { loadAllSavedOutlines } from "@/lib/research-outline-storage";
+import { stagePendingResearchPaper } from "@/lib/research-paper-pending";
 import {
 	clearSavedIdeas,
 	loadAllRecentSessions,
@@ -78,18 +91,6 @@ import {
 } from "@/lib/research-storage";
 
 type WizardStep = 1 | 2 | 3;
-
-const WIZARD_STEPS: { num: WizardStep; label: string }[] = [
-	{ num: 1, label: "Discipline" },
-	{ num: 2, label: "Topic" },
-	{ num: 3, label: "Ideas" },
-];
-
-const WIZARD_STEP_ICONS: Record<WizardStep, ReactNode> = {
-	1: <IconBook size={14} />,
-	2: <IconEdit size={14} />,
-	3: <IconLightbulb size={14} />,
-};
 
 const SCOPE_ICONS: Record<ResearchScope, ReactNode> = {
 	undergraduate: <IconGraduationCap size={18} />,
@@ -108,8 +109,8 @@ const FOCUS_PILL_ICONS: Record<IdeaType | "all", ReactNode> = {
 
 function SkeletonCards() {
 	return (
-		<div className="research-ideas-grid">
-			{Array.from({ length: 6 }).map((_, i) => (
+		<div className="research-ideas-grid research-ideas-grid-three">
+			{Array.from({ length: 3 }).map((_, i) => (
 				<div key={i} className="research-skeleton-card" aria-hidden>
 					<div className="research-skeleton-line research-skeleton-short" />
 					<div className="research-skeleton-line research-skeleton-title" />
@@ -124,19 +125,24 @@ function SkeletonCards() {
 
 export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecturer" | "student" }) {
 	const { user, setTokenQuota } = useAuth();
+	const router = useRouter();
 	const searchParams = useSearchParams();
 	const hasTokens = studentHasResearchTokens(user?.tokenQuota, user?.role);
 	const { status, messages, error, isBusy, sendPrompt, resetSession, clearMessages, abort } = useFeynmanSocket();
+	const isStudent = variant === "student";
 
 	const [step, setStep] = useState<WizardStep>(1);
-	const [discipline, setDiscipline] = useState(DEFAULT_DISCIPLINE);
+	const [discipline, setDiscipline] = useState("");
 	const [topic, setTopic] = useState("");
 	const [scope, setScope] = useState<ResearchScope | "">("");
+	const [citationStyle, setCitationStyle] = useState<CitationStyle | "">("");
 	const [focusFilter, setFocusFilter] = useState<IdeaType | "all">("all");
 	const [localIdeas, setLocalIdeas] = useState<ResearchIdea[] | null>(null);
 	const [hasGenerated, setHasGenerated] = useState(false);
 	const [topicTouched, setTopicTouched] = useState(false);
 	const [scopeTouched, setScopeTouched] = useState(false);
+	const [disciplineTouched, setDisciplineTouched] = useState(false);
+	const [citationTouched, setCitationTouched] = useState(false);
 	const [savedIdeas, setSavedIdeas] = useState<SavedIdea[]>([]);
 	const [recentSessions, setRecentSessions] = useState<ResearchSession[]>([]);
 	const [savedPapers, setSavedPapers] = useState<SavedResearchPaper[]>([]);
@@ -148,6 +154,16 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 	const [generationPhase, setGenerationPhase] = useState<IdeaGenerationPhase | null>(null);
 	const [topicAnalysis, setTopicAnalysis] = useState<ResearchTopicAnalysis | null>(null);
 	const [generateError, setGenerateError] = useState<string | null>(null);
+	const [sourceDocuments, setSourceDocuments] = useState<ResearchDocument[]>([]);
+	const [sourceProjects, setSourceProjects] = useState<ResearchProject[]>([]);
+	const [selectedSources, setSelectedSources] = useState<ResearchSourceSelection>({
+		documentIds: [],
+		datasetIds: [],
+		noteIds: [],
+		projectIds: [],
+	});
+	const [sourcesLoading, setSourcesLoading] = useState(false);
+	const [sourcesError, setSourcesError] = useState<string | null>(null);
 	const prevBusyRef = useRef(false);
 	const generateAbortRef = useRef<AbortController | null>(null);
 
@@ -182,6 +198,96 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 		}
 	}, [user?.id, variant]);
 
+	useEffect(() => {
+		if (!user?.id) return;
+		setSourcesLoading(true);
+		setSourcesError(null);
+		void Promise.all([fetchDocuments(), fetchProjects()])
+			.then(([documents, projects]) => {
+				setSourceDocuments(documents);
+				setSourceProjects(projects);
+			})
+			.catch((err: unknown) => {
+				setSourcesError(err instanceof Error ? err.message : "Could not load your research library.");
+			})
+			.finally(() => setSourcesLoading(false));
+	}, [user?.id]);
+
+	const selectedSourceCount =
+		selectedSources.documentIds.length + (selectedSources.projectIds?.length ?? 0);
+
+	/** Publication → Title from Research Note notebook (preferred Interest topic). */
+	const publicationTitleFromNotebook = (notebookData: unknown): string => {
+		if (!notebookData || typeof notebookData !== "object") return "";
+		const drafts = Array.isArray((notebookData as { drafts?: unknown }).drafts)
+			? ((notebookData as { drafts: Array<{ outputType?: string; section?: string | null; content?: string }> }).drafts)
+			: [];
+		const titleDraft = drafts.find(
+			(d) =>
+				d?.outputType === "publication" &&
+				typeof d.section === "string" &&
+				d.section.trim().toLowerCase() === "title",
+		);
+		const raw = typeof titleDraft?.content === "string" ? titleDraft.content : "";
+		if (!raw.trim()) return "";
+		return raw
+			.replace(/<br\s*\/?>/gi, " ")
+			.replace(/<\/p>/gi, " ")
+			.replace(/<[^>]+>/g, "")
+			.replace(/&nbsp;/gi, " ")
+			.replace(/[#*_`>~]+/g, "")
+			.replace(/\s+/g, " ")
+			.trim()
+			.slice(0, 500);
+	};
+
+	const applyInterestTopicFromNote = async (project: ResearchProject) => {
+		// Prefer Publication → Title; fall back to project name while notebook loads.
+		setTopic((project.title?.trim() ?? "").slice(0, 500));
+		setTopicTouched(false);
+		try {
+			const { notebookData } = await fetchNotebook(project.id);
+			const pubTitle = publicationTitleFromNotebook(notebookData);
+			if (pubTitle) {
+				setTopic(pubTitle);
+				setTopicTouched(false);
+			}
+		} catch {
+			/* Keep project title if notebook is unavailable. */
+		}
+	};
+
+	const toggleSource = (kind: keyof ResearchSourceSelection, id: string) => {
+		setSelectedSources((current) => {
+			const list = current[kind] ?? [];
+			return {
+				...current,
+				[kind]: list.includes(id)
+					? list.filter((value) => value !== id)
+					: [...list, id].slice(0, 5),
+			};
+		});
+	};
+
+	/** Select/deselect a research note and set Interest topic from Publication → Title. */
+	const toggleResearchNote = (project: ResearchProject) => {
+		const wasSelected = (selectedSources.projectIds ?? []).includes(project.id);
+		setSelectedSources((current) => {
+			const list = current.projectIds ?? [];
+			const projectIds = wasSelected
+				? list.filter((value) => value !== project.id)
+				: [...list, project.id].slice(0, 5);
+			return { ...current, projectIds };
+		});
+		if (!wasSelected) {
+			void applyInterestTopicFromNote(project);
+			return;
+		}
+		const remainingIds = (selectedSources.projectIds ?? []).filter((id) => id !== project.id);
+		const remaining = sourceProjects.find((p) => remainingIds.includes(p.id));
+		if (remaining) void applyInterestTopicFromNote(remaining);
+	};
+
 	const assistantContent = useMemo(() => {
 		const assistantMessages = messages.filter((m) => m.role === "assistant" && m.content.trim());
 		if (!assistantMessages.length) return null;
@@ -207,7 +313,9 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 
 	const topicError = topicTouched && !topic.trim();
 	const scopeError = scopeTouched && !scope;
-	const disciplineLabel = getDisciplineLabel(discipline);
+	const disciplineError = disciplineTouched && !discipline;
+	const citationError = citationTouched && !citationStyle;
+	const disciplineLabel = discipline ? getDisciplineLabel(discipline) : "";
 
 	const savedIdeaKeys = useMemo(
 		() => new Set(savedIdeas.map((s) => `${s.id}::${s.title}`)),
@@ -224,7 +332,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 			setTopicTouched(true);
 			return false;
 		}
-		if (!scope) return false;
+		if (!discipline || !scope || !citationStyle) return false;
 		if (!hasTokens) return false;
 
 		setHasGenerated(true);
@@ -253,6 +361,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 					disciplineLabel,
 					topic: topic.trim(),
 					scope,
+					sources: selectedSources,
 				},
 				{ signal: controller.signal },
 			);
@@ -275,6 +384,8 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 			const message = err instanceof Error ? err.message : "Generation failed.";
 			setGenerateError(message);
 
+			if (selectedSourceCount > 0) return false;
+
 			if (status === "connected") {
 				clearMessages();
 				sendPrompt(buildResearchIdeasPrompt(discipline, topic, scope));
@@ -291,17 +402,18 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 			setIsGenerating(false);
 			generateAbortRef.current = null;
 		}
-	}, [discipline, topic, scope, status, clearMessages, sendPrompt, hasTokens, disciplineLabel, setTokenQuota]);
+	}, [discipline, topic, scope, citationStyle, status, clearMessages, sendPrompt, hasTokens, disciplineLabel, selectedSources, selectedSourceCount, setTokenQuota]);
 
 	useEffect(() => {
 		if (!hasGenerated || isBusy || isGenerating || !topic.trim() || !scope) return;
 		if (localIdeas?.length || parsedIdeas?.length) return;
+		if (selectedSourceCount > 0) return;
 		if (status === "connected" && !assistantContent && !error && !generateError) return;
 
 		const ideas = generateLocalResearchIdeas(discipline, topic);
 		setLocalIdeas(ideas);
 		setRecentSessions(pushRecentSession({ discipline, topic: topic.trim(), scope, ideas }));
-	}, [hasGenerated, isBusy, isGenerating, topic, localIdeas, parsedIdeas, status, assistantContent, error, generateError, discipline, scope]);
+	}, [hasGenerated, isBusy, isGenerating, topic, localIdeas, parsedIdeas, status, assistantContent, error, generateError, discipline, scope, selectedSourceCount]);
 
 	useEffect(() => {
 		if (prevBusyRef.current && !isBusy && parsedIdeas?.length && scope) {
@@ -389,8 +501,10 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 
 	const goNext = () => {
 		if (step === 1) {
+			setDisciplineTouched(true);
 			setScopeTouched(true);
-			if (!scope) return;
+			setCitationTouched(true);
+			if (!discipline || !scope || !citationStyle) return;
 			setStep(2);
 			return;
 		}
@@ -399,6 +513,42 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 			if (!topic.trim()) return;
 			handleGenerate();
 		}
+	};
+
+	const handleGenerateResearch = () => {
+		setTopicTouched(true);
+		setDisciplineTouched(true);
+		setScopeTouched(true);
+		setCitationTouched(true);
+		const trimmedTopic = topic.trim();
+		if (!trimmedTopic || !discipline || !scope || !citationStyle || !hasTokens) return;
+
+		const idea: ResearchIdea = {
+			id: `direct-${discipline}-${scope}`,
+			title: trimmedTopic,
+			rationale: `Draft a full research paper from the interest topic “${trimmedTopic}” in ${disciplineLabel || "the selected field"}.`,
+			approach: "Literature-informed draft guided by the selected research scope and citation style.",
+			type: "empirical",
+			feasibility: "medium",
+		};
+		const returnTo =
+			typeof window !== "undefined"
+				? `${window.location.pathname}${window.location.search}`
+				: undefined;
+		const key = stageOutlinePageContext({
+			idea,
+			discipline,
+			topic: trimmedTopic,
+			scope,
+			sources: selectedSources,
+			returnTo,
+		});
+		stagePendingResearchPaper({
+			key,
+			citationStyle,
+			projectName: trimmedTopic,
+		});
+		router.push(researchPaperWorkspacePath(trimmedTopic, isStudent ? "student" : "lecturer", key));
 	};
 
 	const goBack = () => {
@@ -518,7 +668,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 			return (
 				<>
 					{renderTopicAnalysis()}
-					<div className="research-ideas-grid">
+					<div className="research-ideas-grid research-ideas-grid-three">
 						{filteredIdeas.map((idea, i) => (
 							<ResearchIdeaCard
 								key={idea.id}
@@ -527,6 +677,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 								topic={topic.trim()}
 								discipline={discipline}
 								scope={scope || "masters"}
+								sources={selectedSources}
 								saved={isSavedIdea(idea)}
 								studentUI={variant === "student"}
 								onSave={() => handleSave(idea)}
@@ -585,7 +736,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 		return null;
 	};
 
-	const chatHref = variant === "student" ? "/student/dashboard" : "/dashboard/chat";
+	const chatHref = variant === "student" ? "/student/dashboard" : "/research";
 
 	const page = (
 		<div className={variant === "student" ? "research-page research-page-student" : "research-page"}>
@@ -594,7 +745,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 						<div className="research-page-icon" aria-hidden>
 							<NavIcon id="research" size={24} />
 						</div>
-						<div>
+						<div className="research-page-header-copy">
 							<p className="research-page-eyebrow">Research discovery</p>
 							<h1 className="research-page-title">Research Assistant</h1>
 							<p className="research-page-lead">
@@ -639,6 +790,9 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 								)}
 							</button>
 						)}
+						<Link href={isStudent ? "/student/research/note" : "/research/note"} className="research-btn research-btn-outline research-btn-sm">
+							Research Note
+						</Link>
 						<Link href={chatHref} className="research-btn research-btn-outline research-btn-sm">
 							{variant === "student" ? (
 								<>
@@ -654,40 +808,6 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 						</Link>
 					</div>
 				</header>
-
-				<nav className="research-steps-bar" aria-label="Wizard progress">
-					<ol className="research-steps">
-						{WIZARD_STEPS.map(({ num, label }, i) => (
-							<li key={num} className="research-step-wrap">
-								<button
-									type="button"
-									className={`research-step ${
-										step === num && !showSaved && !showHistory
-											? "research-step-active"
-											: step > num || (num === 3 && hasGenerated)
-												? "research-step-done"
-												: ""
-									}`}
-									onClick={() => {
-										if (showSaved || showHistory) {
-											setShowSaved(false);
-											setShowHistory(false);
-										}
-										if (num < step) setStep(num);
-										if (num === 3 && hasGenerated) setStep(3);
-									}}
-									disabled={num === 3 && !hasGenerated}
-									aria-current={step === num && !showSaved && !showHistory ? "step" : undefined}
-								>
-									<span className="research-step-num">{step > num ? "✓" : num}</span>
-									<span className="research-step-icon">{WIZARD_STEP_ICONS[num]}</span>
-									<span className="research-step-label">{label}</span>
-								</button>
-								{i < WIZARD_STEPS.length - 1 && <span className="research-step-line" aria-hidden />}
-							</li>
-						))}
-					</ol>
-				</nav>
 
 				<div className="research-wizard">
 					<div className="research-wizard-card">
@@ -775,21 +895,40 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 									<div className="research-form-section research-form-section-indigo">
 										<DisciplineSelect
 											value={discipline}
-											onChange={setDiscipline}
+											onChange={(id) => {
+												setDiscipline(id);
+												setDisciplineTouched(true);
+											}}
 											label="Your field or discipline"
 											labelIcon={<IconLayers size={15} />}
 											wrapClassName="research-discipline-wrap"
 											selectClassName="research-form-select"
 											hint="Choose the academic area closest to your research interest."
 										/>
+										{disciplineError && <p className="error-text">Please select your field or discipline.</p>}
 										<ResearchScopeSelect
 											value={scope}
-											onChange={setScope}
+											onChange={(next) => {
+												setScope(next);
+												setScopeTouched(true);
+											}}
 											labelIcon={<IconGraduationCap size={15} />}
 											wrapClassName="research-scope-wrap"
 											selectClassName="research-form-select"
 										/>
 										{scopeError && <p className="error-text">Please select a research scope.</p>}
+										<div className="research-citation-style-wrap">
+											<CitationStyleSelect
+												id="research-reference-style"
+												value={citationStyle}
+												onChange={(style) => {
+													setCitationStyle(style);
+													setCitationTouched(true);
+													if (style) saveChatCitationStyle(style);
+												}}
+											/>
+											{citationError && <p className="error-text">Please select a reference style.</p>}
+										</div>
 									</div>
 								</div>
 							</>
@@ -803,22 +942,32 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 										<div>
 											<h2 className="research-wizard-title">Your interest topic</h2>
 											<p className="research-wizard-subtitle">
-												Share a theme or draft focus. A four-agent pipeline will identify discipline, variables,
-												population, context, and research gaps before formulating publishable study titles.
+												Share a theme or draft focus — or select a research note below to set this
+												from Publication → Title. Generate ideas or a full paper grounded in that note.
 											</p>
 										</div>
 									</div>
 								</div>
 								<div className="research-wizard-body">
 									<div className="research-summary-pill">
-										<span className="research-summary-chip research-summary-chip-indigo">
-											<IconLayers size={13} />
-											{disciplineLabel}
-										</span>
-										<span className="research-summary-chip research-summary-chip-violet">
-											{SCOPE_ICONS[scope as ResearchScope]}
-											{SCOPE_OPTIONS.find((s) => s.id === scope)?.label}
-										</span>
+										{disciplineLabel ? (
+											<span className="research-summary-chip research-summary-chip-indigo">
+												<IconLayers size={13} />
+												{disciplineLabel}
+											</span>
+										) : null}
+										{scope ? (
+											<span className="research-summary-chip research-summary-chip-violet">
+												{SCOPE_ICONS[scope as ResearchScope]}
+												{SCOPE_OPTIONS.find((s) => s.id === scope)?.label}
+											</span>
+										) : null}
+										{citationStyle ? (
+											<span className="research-summary-chip research-summary-chip-teal">
+												<IconBook size={13} />
+												{getStyleLabel(citationStyle)}
+											</span>
+										) : null}
 									</div>
 									<div className="research-form-section research-form-section-violet">
 										<div className="research-field">
@@ -846,21 +995,94 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 											</div>
 											{topicError && <p className="error-text">Please enter an interest topic.</p>}
 											<p className="research-char-count">{topic.length} / 500</p>
-											<div className="research-topic-guidance">
-												<p className="research-topic-guidance-title">Themes vs. research topics</p>
-												<ul className="research-topic-guidance-list">
-													{VAGUE_TOPIC_EXAMPLES.slice(0, 3).map((example) => (
-														<li key={example} className="research-topic-guidance-avoid">
-															{example} — too broad
-														</li>
-													))}
-													{STRONG_TOPIC_EXAMPLES.slice(0, 2).map((example) => (
-														<li key={example}>{example}</li>
-													))}
-												</ul>
-											</div>
 										</div>
 									</div>
+									<section className="research-source-picker" aria-labelledby="research-source-picker-title">
+										<div className="research-source-picker-head">
+											<div>
+												<h3 id="research-source-picker-title" className="research-source-picker-title">
+													Use your research library
+													{selectedSourceCount > 0 && (
+														<span className="research-source-picker-count">{selectedSourceCount} selected</span>
+													)}
+												</h3>
+												<p className="research-source-picker-help">
+													Optional: select research notes for the agent to read. Selecting a note
+													sets Interest topic from Publication → Title. The agent uses the note’s
+													pages, drafts, data, figures, and findings to generate titles, abstracts,
+													and the full paper.
+												</p>
+											</div>
+										</div>
+										{sourcesLoading ? (
+											<p className="research-source-picker-state">Loading your library…</p>
+										) : sourcesError ? (
+											<p className="research-source-picker-error" role="alert">{sourcesError}</p>
+										) : sourceDocuments.length + sourceProjects.length === 0 ? (
+											<p className="research-source-picker-state">
+												No research notes yet.{" "}
+												<Link href="/research/note" className="research-source-picker-link">
+													Open Research Note
+												</Link>{" "}
+												to create one, then return here to use it as grounded context.
+											</p>
+										) : (
+											<div className="research-source-groups">
+												{sourceProjects.length > 0 && (
+													<fieldset className="research-source-group">
+														<legend>Research notes</legend>
+														{sourceProjects.map((project) => (
+															<label key={project.id} className="research-source-option">
+																<input
+																	type="checkbox"
+																	checked={(selectedSources.projectIds ?? []).includes(project.id)}
+																	onChange={() => toggleResearchNote(project)}
+																/>
+																<span>
+																	<strong>{project.title}</strong>
+																	<small>
+																		{[
+																			project.description?.trim() || null,
+																			`${project.progress}% complete`,
+																			project.counts.notes
+																				? `${project.counts.notes} findings`
+																				: null,
+																			project.counts.datasets
+																				? `${project.counts.datasets} datasets`
+																				: null,
+																			project.counts.documents
+																				? `${project.counts.documents} documents`
+																				: null,
+																		]
+																			.filter(Boolean)
+																			.join(" · ")}
+																	</small>
+																</span>
+															</label>
+														))}
+													</fieldset>
+												)}
+												{sourceDocuments.length > 0 && (
+													<fieldset className="research-source-group">
+														<legend>Documents</legend>
+														{sourceDocuments.map((document) => (
+															<label key={document.id} className="research-source-option">
+																<input
+																	type="checkbox"
+																	checked={selectedSources.documentIds.includes(document.id)}
+																	onChange={() => toggleSource("documentIds", document.id)}
+																/>
+																<span>
+																	<strong>{document.title}</strong>
+																	<small>{document.fileName}</small>
+																</span>
+															</label>
+														))}
+													</fieldset>
+												)}
+											</div>
+										)}
+									</section>
 									{recentSessions.length > 0 && (
 										<section className="research-recent">
 											<h3 className="research-recent-title">
@@ -1016,17 +1238,31 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 									</button>
 								)}
 								{!showSaved && !showHistory && step < 3 && (
-									<button
-										type="button"
-										className="research-nav-btn research-nav-btn-next"
-										onClick={goNext}
-										disabled={(step === 2 && (isGenerating || isBusy)) || (step === 2 && !hasTokens)}
-										title={step === 2 && !hasTokens ? "Research token limit reached" : undefined}
-									>
-										{step === 2 && !isGenerating && !isBusy && <IconSparkles size={16} />}
-										{step === 2 ? (isGenerating || isBusy ? "Generating…" : "Generate ideas") : "Next"}
-										{step === 1 && <IconChevronRight size={16} />}
-									</button>
+									<>
+										{step === 2 && (
+											<button
+												type="button"
+												className="research-nav-btn research-nav-btn-generate"
+												onClick={handleGenerateResearch}
+												disabled={isGenerating || isBusy || !hasTokens}
+												title={!hasTokens ? "Research token limit reached" : "Draft a full research paper from this topic"}
+											>
+												<IconFileText size={16} />
+												Generate Research
+											</button>
+										)}
+										<button
+											type="button"
+											className="research-nav-btn research-nav-btn-next"
+											onClick={goNext}
+											disabled={(step === 2 && (isGenerating || isBusy)) || (step === 2 && !hasTokens)}
+											title={step === 2 && !hasTokens ? "Research token limit reached" : undefined}
+										>
+											{step === 2 && !isGenerating && !isBusy && <IconSparkles size={16} />}
+											{step === 2 ? (isGenerating || isBusy ? "Generating…" : "Generate ideas") : "Next"}
+											{step === 1 && <IconChevronRight size={16} />}
+										</button>
+									</>
 								)}
 							</div>
 						</footer>

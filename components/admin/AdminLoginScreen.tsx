@@ -26,7 +26,7 @@ export function AdminLoginScreen() {
 		try {
 			const loggedIn = await login({ email, password });
 			if (loggedIn.role !== "admin") {
-				logout();
+				logout(false);
 				throw new Error("This account does not have admin access.");
 			}
 			router.push("/admin");

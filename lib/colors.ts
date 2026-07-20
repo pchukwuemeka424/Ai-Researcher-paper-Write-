@@ -1,5 +1,5 @@
 /**
- * TrustLed Aula — custom color palette.
+ * GAHI — custom color palette.
  * CSS mirror: styles/colors.css (keep both files in sync).
  */
 export const colors = {
@@ -38,7 +38,7 @@ export const colors = {
 		dashboard: { bg: "#0D0B61", fg: "#ffffff" },
 		research: { bg: "#7c3aed", fg: "#ffffff" },
 		references: { bg: "#16a34a", fg: "#ffffff" },
-		"lesson-planner": { bg: "#4f46e5", fg: "#ffffff" },
+		"lesson-planner": { bg: "#711738", fg: "#ffffff" },
 		chat: { bg: "#ea580c", fg: "#ffffff" },
 		users: { bg: "#2563eb", fg: "#ffffff" },
 		sessions: { bg: "#7c3aed", fg: "#ffffff" },
@@ -47,14 +47,24 @@ export const colors = {
 		folder: { bg: "#d97706", fg: "#ffffff" },
 		database: { bg: "#0f766e", fg: "#ffffff" },
 		notes: { bg: "#0d9488", fg: "#ffffff" },
+		governance: { bg: "#0D0B61", fg: "#ffffff" },
+		analytics: { bg: "#2563eb", fg: "#ffffff" },
+		policy: { bg: "#7c3aed", fg: "#ffffff" },
+		audit: { bg: "#dc2626", fg: "#ffffff" },
+		approvals: { bg: "#059669", fg: "#ffffff" },
+		reports: { bg: "#711738", fg: "#ffffff" },
+		risk: { bg: "#c2410c", fg: "#ffffff" },
+		compliance: { bg: "#1d4ed8", fg: "#ffffff" },
+		incident: { bg: "#b91c1c", fg: "#ffffff" },
+		inventory: { bg: "#0f766e", fg: "#ffffff" },
 		default: { bg: "#64748b", fg: "#ffffff" },
 	},
 	feature: {
-		researchAccent: "#4f46e5",
-		researchAccentHover: "#4338ca",
-		researchHero: "#1e1b4b",
-		lessonPlannerAccent: "#0d9488",
-		lessonPlannerAccentHover: "#0f766e",
+		researchAccent: "#0D0B61",
+		researchAccentHover: "#12108a",
+		researchHero: "#060549",
+		lessonPlannerAccent: "#711738",
+		lessonPlannerAccentHover: "#5a1230",
 		loginAccent: "#7c3aed",
 		loginAccentHover: "#6d28d9",
 	},

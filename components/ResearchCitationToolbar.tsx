@@ -7,9 +7,8 @@ import {
 	buildChangeCitationStylePrompt,
 	buildUpdateReferencesPrompt,
 	saveChatCitationStyle,
-	type CitationStyle,
 } from "@/lib/chat-research-citations";
-import { getStyleLabel } from "@/lib/citation-styles";
+import { getStyleLabel, type CitationStyle } from "@/lib/citation-styles";
 
 type Props = {
 	visible: boolean;
@@ -29,7 +28,8 @@ export function ResearchCitationToolbar({
 	onUpdateReferences,
 }: Props) {
 	const handleStyleChange = useCallback(
-		(style: CitationStyle) => {
+		(style: CitationStyle | "") => {
+			if (!style) return;
 			onCitationStyleChange(style);
 			saveChatCitationStyle(style);
 		},

@@ -4,12 +4,20 @@ import { CITATION_STYLE_GROUPS, type CitationStyle } from "@/lib/citation-styles
 
 type Props = {
 	id?: string;
-	value: CitationStyle;
-	onChange: (style: CitationStyle) => void;
+	value: CitationStyle | "";
+	onChange: (style: CitationStyle | "") => void;
+	placeholder?: string;
 };
 
-export function CitationStyleSelect({ id = "citation-style", value, onChange }: Props) {
-	const selected = CITATION_STYLE_GROUPS.flatMap((g) => g.styles).find((s) => s.id === value);
+export function CitationStyleSelect({
+	id = "citation-style",
+	value,
+	onChange,
+	placeholder = "Select References style",
+}: Props) {
+	const selected = value
+		? CITATION_STYLE_GROUPS.flatMap((g) => g.styles).find((s) => s.id === value)
+		: undefined;
 
 	return (
 		<div className="ref-style-select-wrap">
@@ -19,10 +27,13 @@ export function CitationStyleSelect({ id = "citation-style", value, onChange }: 
 			<div className="ref-style-select-inner">
 				<select
 					id={id}
-					className="ref-style-select"
+					className={`ref-style-select${!value ? " research-form-select-placeholder" : ""}`}
 					value={value}
-					onChange={(e) => onChange(e.target.value as CitationStyle)}
+					onChange={(e) => onChange(e.target.value === "" ? "" : (e.target.value as CitationStyle))}
 				>
+					<option value="" disabled>
+						{placeholder}
+					</option>
 					{CITATION_STYLE_GROUPS.map((group) => (
 						<optgroup key={group.id} label={group.label}>
 							{group.styles.map((s) => (

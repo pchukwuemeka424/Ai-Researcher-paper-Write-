@@ -7,6 +7,8 @@ const savedResearchIdeaSchema = new Schema(
 		title: { type: String, required: true },
 		rationale: { type: String, required: true },
 		approach: { type: String, required: true },
+		outline: { type: String, required: false },
+		researchQuestions: { type: [String], required: false, default: undefined },
 		type: {
 			type: String,
 			enum: ["empirical", "theoretical", "interdisciplinary", "applied"],

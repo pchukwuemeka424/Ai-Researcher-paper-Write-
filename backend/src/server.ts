@@ -67,6 +67,39 @@ import {
 	saveResearchOutlineRecord,
 } from "./services/saved-research-outline.service.js";
 import {
+	createDataset,
+	createDocument,
+	createNote,
+	createProject,
+	createReference,
+	deleteDataset,
+	deleteDocument,
+	deleteNote,
+	deleteProject,
+	deleteReference,
+	getDataset,
+	getDatasetFile,
+	getDocumentFile,
+	getNotebookData,
+	getOrCreateProject,
+	getProject,
+	getWorkspaceBundle,
+	listActivity,
+	listDatasets,
+	listDocuments,
+	listNotes,
+	listProjects,
+	listReferences,
+	saveNotebookData,
+	updateNote,
+	updateProject,
+} from "./services/research-assets.service.js";
+import { buildPaperVisualizationArtifacts, plotDatasetGraph } from "./services/research-graph.service.js";
+import {
+	buildResearchSourceContext,
+	type ResearchSourceSelection,
+} from "./services/research-source-context.service.js";
+import {
 	adminDeleteLecture,
 	getLectureAdminStats,
 	listAllLectures,
@@ -102,7 +135,64 @@ import {
 	listBackupTables,
 	readBackupFile,
 } from "./services/admin-backup.service.js";
+import { getUsageAnalytics } from "./services/admin-analytics.service.js";
+import {
+	flagAuditLog,
+	getAuditAlertStats,
+	listAuditLogs,
+	recordAuditEvent,
+} from "./services/admin-audit.service.js";
+import {
+	createApproval,
+	getApprovalStats,
+	listApprovals,
+	reviewApproval,
+} from "./services/admin-approvals.service.js";
+import { getGovernanceDashboard } from "./services/admin-governance.service.js";
+import {
+	createPolicy,
+	deletePolicy,
+	evaluatePolicy,
+	getPolicyStats,
+	listPolicies,
+	updatePolicy,
+} from "./services/admin-policy.service.js";
+import {
+	generateGovernanceReport,
+	getGovernanceReport,
+	listGovernanceReports,
+} from "./services/admin-reports.service.js";
+import {
+	createRisk,
+	deleteRisk,
+	getRiskStats,
+	listRisks,
+	updateRisk,
+} from "./services/admin-risk.service.js";
+import {
+	createComplianceControl,
+	getComplianceStats,
+	listComplianceControls,
+	updateComplianceControl,
+	deleteComplianceControl,
+} from "./services/admin-compliance.service.js";
+import {
+	createIncident,
+	getIncidentStats,
+	listIncidents,
+	updateIncident,
+} from "./services/admin-incidents.service.js";
+import {
+	createAiSystem,
+	deleteAiSystem,
+	ensureDefaultAiSystems,
+	getAiSystemStats,
+	listAiSystems,
+	updateAiSystem,
+} from "./services/admin-inventory.service.js";
+import { cleanupSeededGovernanceMocks } from "./services/admin-governance-cleanup.service.js";
 import { ensureDefaultAdmin } from "./services/bootstrap-admin.service.js";
+import { handleGenerate as handleResearchNoteGenerate } from "./services/research-note-ai/handler.js";
 
 async function resolveUserId(authorization?: string): Promise<string | null> {
 	const token = extractBearerToken(authorization);
@@ -162,6 +252,8 @@ export async function startServer(port: number): Promise<void> {
 	ensureSupportedNodeVersion();
 	await connectMongo();
 	await ensureDefaultAdmin();
+	await cleanupSeededGovernanceMocks();
+	await ensureDefaultAiSystems();
 
 	const ctx = createAppContext();
 	const chat = new ChatService(ctx);
@@ -303,11 +395,14 @@ export async function startServer(port: number): Promise<void> {
 				approach?: string;
 				type?: string;
 				feasibility?: string;
+				outline?: string;
+				researchQuestions?: string[];
 			};
 			discipline?: string;
 			disciplineLabel?: string;
 			topic?: string;
 			scope?: string;
+			sources?: ResearchSourceSelection;
 		};
 
 		if (!body.idea?.title?.trim()) {
@@ -333,6 +428,13 @@ export async function startServer(port: number): Promise<void> {
 			if (userId) {
 				await assertStudentHasTokenBalance(userId);
 			}
+			const sourceContext = await buildResearchSourceContext(userId, body.sources);
+			const hasNoteSources = Boolean(
+				body.sources?.projectIds?.length ||
+					body.sources?.noteIds?.length ||
+					body.sources?.documentIds?.length ||
+					body.sources?.datasetIds?.length,
+			);
 
 			const result = await generateResearchOutline({
 				idea: {
@@ -341,10 +443,16 @@ export async function startServer(port: number): Promise<void> {
 					approach: body.idea.approach?.trim() ?? "",
 					type: body.idea.type?.trim() ?? "empirical",
 					feasibility: body.idea.feasibility?.trim() ?? "medium",
+					outline: body.idea.outline?.trim() || undefined,
+					researchQuestions: Array.isArray(body.idea.researchQuestions)
+						? body.idea.researchQuestions.map((q) => String(q).trim()).filter(Boolean)
+						: undefined,
 				},
 				disciplineLabel: body.disciplineLabel.trim(),
 				topic: body.topic.trim(),
 				scope: scope as "undergraduate" | "masters" | "doctoral" | "faculty",
+				sourceContext,
+				fast: hasNoteSources,
 			});
 
 			let tokenQuota;
@@ -366,6 +474,7 @@ export async function startServer(port: number): Promise<void> {
 			return {
 				outline: result.outline,
 				papers: result.papers,
+				...(sourceContext ? { sourceContext } : {}),
 				...(tokenQuota ? { tokenQuota } : {}),
 			};
 		} catch (error) {
@@ -380,6 +489,7 @@ export async function startServer(port: number): Promise<void> {
 			disciplineLabel?: string;
 			topic?: string;
 			scope?: string;
+			sources?: ResearchSourceSelection;
 		};
 
 		if (!body.disciplineLabel?.trim()) {
@@ -400,11 +510,13 @@ export async function startServer(port: number): Promise<void> {
 			if (userId) {
 				await assertStudentHasTokenBalance(userId);
 			}
+			const sourceContext = await buildResearchSourceContext(userId, body.sources);
 
 			const result = await generateResearchIdeas({
 				disciplineLabel: body.disciplineLabel.trim(),
 				topic: body.topic.trim(),
 				scope: scope as "undergraduate" | "masters" | "doctoral" | "faculty",
+				sourceContext,
 			});
 
 			let tokenQuota;
@@ -429,6 +541,10 @@ export async function startServer(port: number): Promise<void> {
 			department?: string;
 			departmentLabel?: string;
 			level?: string;
+			mode?: string;
+			standards?: string;
+			sourceMaterial?: string;
+			sessionCount?: number;
 		};
 
 		if (!body.title?.trim()) {
@@ -451,13 +567,29 @@ export async function startServer(port: number): Promise<void> {
 			return reply.code(400).send({ error: "Invalid teaching level." });
 		}
 
+		const validModes = new Set(["outline", "session", "activities", "rubric"]);
+		const modeRaw = body.mode?.trim() || "outline";
+		if (!validModes.has(modeRaw)) {
+			return reply.code(400).send({ error: "Invalid output mode." });
+		}
+		const mode = modeRaw as "outline" | "session" | "activities" | "rubric";
+
+		const sessionCount =
+			typeof body.sessionCount === "number" && Number.isFinite(body.sessionCount)
+				? Math.min(24, Math.max(4, Math.round(body.sessionCount)))
+				: undefined;
+
 		try {
 			const result = await generateCourseOutline({
 				title: body.title.trim(),
 				departmentLabel: body.departmentLabel.trim(),
 				level: level as "foundation" | "undergraduate-l1" | "undergraduate-l2" | "undergraduate-l3" | "postgraduate" | "professional",
+				mode,
+				standards: body.standards?.trim() || undefined,
+				sourceMaterial: body.sourceMaterial?.trim() || undefined,
+				sessionCount,
 			});
-			return { outline: result.outline, plan: result.outline };
+			return { outline: result.outline, plan: result.outline, mode };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return reply.code(502).send({ error: message });
@@ -712,6 +844,8 @@ export async function startServer(port: number): Promise<void> {
 			title?: string;
 			rationale?: string;
 			approach?: string;
+			outline?: string;
+			researchQuestions?: string[];
 			type?: string;
 			feasibility?: string;
 			discipline?: string;
@@ -743,6 +877,10 @@ export async function startServer(port: number): Promise<void> {
 				discipline: body.discipline,
 				topic: body.topic,
 				status: body.status,
+				outline: body.outline,
+				researchQuestions: Array.isArray(body.researchQuestions)
+					? body.researchQuestions.map((q) => String(q).trim()).filter(Boolean)
+					: undefined,
 			});
 			return { idea };
 		} catch (error) {
@@ -802,6 +940,8 @@ export async function startServer(port: number): Promise<void> {
 				approach?: string;
 				type?: string;
 				feasibility?: string;
+				outline?: string;
+				researchQuestions?: string[];
 			}>;
 		};
 
@@ -824,6 +964,14 @@ export async function startServer(port: number): Promise<void> {
 				approach: idea.approach?.trim() ?? "",
 				type: idea.type?.trim() ?? "empirical",
 				feasibility: idea.feasibility?.trim() ?? "medium",
+				...(idea.outline?.trim() ? { outline: idea.outline.trim() } : {}),
+				...(Array.isArray(idea.researchQuestions) && idea.researchQuestions.length
+					? {
+							researchQuestions: idea.researchQuestions
+								.map((q) => String(q).trim())
+								.filter(Boolean),
+						}
+					: {}),
 			}));
 
 		if (!ideas.length) {
@@ -859,11 +1007,493 @@ export async function startServer(port: number): Promise<void> {
 		return { outlines };
 	});
 
+	app.post("/api/research/outlines/saved", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+
+		const body = request.body as {
+			ideaId?: string;
+			ideaTitle?: string;
+			discipline?: string;
+			topic?: string;
+			scope?: string;
+			outline?: string;
+		};
+
+		const validScopes = new Set(["undergraduate", "masters", "doctoral", "faculty"]);
+		const scope = body.scope?.trim();
+		if (
+			!body.ideaId?.trim() ||
+			!body.ideaTitle?.trim() ||
+			!body.discipline?.trim() ||
+			!body.topic?.trim() ||
+			!body.outline?.trim() ||
+			!scope ||
+			!validScopes.has(scope)
+		) {
+			return reply.code(400).send({
+				error: "ideaId, ideaTitle, discipline, topic, scope, and outline are required.",
+			});
+		}
+
+		try {
+			const outline = await saveResearchOutlineRecord(userId, {
+				ideaId: body.ideaId.trim(),
+				ideaTitle: body.ideaTitle.trim(),
+				discipline: body.discipline.trim(),
+				topic: body.topic.trim(),
+				scope: scope as "undergraduate" | "masters" | "doctoral" | "faculty",
+				outline: body.outline.trim(),
+			});
+			return { outline };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
 	app.delete<{ Params: { id: string } }>("/api/research/outlines/saved/:id", async (request, reply) => {
 		const userId = await resolveUserId(request.headers.authorization);
 		if (!userId) return reply.code(401).send({ error: "Authentication required." });
 		const deleted = await deleteSavedResearchOutline(request.params.id, userId);
 		if (!deleted) return reply.code(404).send({ error: "Outline not found." });
+		return { ok: true };
+	});
+
+	app.get("/api/research/projects", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		try {
+			const projects = await listProjects(userId);
+			return { projects };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.post("/api/research/projects", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as {
+			title?: string;
+			description?: string;
+			projectType?: string;
+		};
+		try {
+			const project = await createProject(userId, body);
+			return { project };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.get<{ Params: { projectId: string } }>("/api/research/projects/:projectId", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		try {
+			const project = await getProject(userId, request.params.projectId);
+			return { project };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("not found") ? 404 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { projectId: string } }>("/api/research/projects/:projectId", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as {
+			title?: string;
+			description?: string;
+			status?: "draft" | "in_progress" | "completed";
+			favorite?: boolean;
+			projectType?: string;
+			sections?: Array<{ id: string; title?: string; content?: string }>;
+		};
+		try {
+			const project = await updateProject(userId, request.params.projectId, body);
+			return { project };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("not found") ? 404 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { projectId: string } }>("/api/research/projects/:projectId", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		try {
+			const deleted = await deleteProject(userId, request.params.projectId);
+			if (!deleted) return reply.code(404).send({ error: "Project not found." });
+			return { ok: true };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("not found") ? 404 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.get<{ Params: { projectId: string } }>(
+		"/api/research/projects/:projectId/notebook",
+		async (request, reply) => {
+			const userId = await resolveUserId(request.headers.authorization);
+			if (!userId) return reply.code(401).send({ error: "Authentication required." });
+			try {
+				return await getNotebookData(userId, request.params.projectId);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				const status = message.includes("not found") ? 404 : 400;
+				return reply.code(status).send({ error: message });
+			}
+		},
+	);
+
+	app.put<{ Params: { projectId: string } }>(
+		"/api/research/projects/:projectId/notebook",
+		async (request, reply) => {
+			const userId = await resolveUserId(request.headers.authorization);
+			if (!userId) return reply.code(401).send({ error: "Authentication required." });
+			const body = request.body as { notebookData?: unknown };
+			try {
+				return await saveNotebookData(userId, request.params.projectId, body.notebookData ?? null);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				const status = message.includes("not found") ? 404 : 400;
+				return reply.code(status).send({ error: message });
+			}
+		},
+	);
+
+	app.get<{ Params: { projectId: string } }>(
+		"/api/research/projects/:projectId/workspace",
+		async (request, reply) => {
+			const userId = await resolveUserId(request.headers.authorization);
+			if (!userId) return reply.code(401).send({ error: "Authentication required." });
+			try {
+				const workspace = await getWorkspaceBundle(userId, request.params.projectId);
+				return workspace;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				const status = message.includes("not found") ? 404 : 400;
+				return reply.code(status).send({ error: message });
+			}
+		},
+	);
+
+	app.get("/api/research/project", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const projectId = (request.query as { projectId?: string }).projectId;
+		try {
+			const project = projectId
+				? await getProject(userId, projectId)
+				: await getOrCreateProject(userId);
+			return { project };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("not found") ? 404 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.get("/api/research/workspace", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const projectIdQuery = (request.query as { projectId?: string }).projectId;
+		try {
+			const projectId =
+				projectIdQuery?.trim() || (await getOrCreateProject(userId)).id;
+			const workspace = await getWorkspaceBundle(userId, projectId);
+			return workspace;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("not found") ? 404 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.patch("/api/research/project", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as {
+			projectId?: string;
+			title?: string;
+			description?: string;
+			status?: "draft" | "in_progress" | "completed";
+			favorite?: boolean;
+			projectType?: string;
+			sections?: Array<{ id: string; title?: string; content?: string }>;
+		};
+		try {
+			const projectId =
+				body.projectId?.trim() || (await getOrCreateProject(userId)).id;
+			const project = await updateProject(userId, projectId, body);
+			return { project };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("not found") ? 404 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.get("/api/research/activity", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const projectId = (request.query as { projectId?: string }).projectId;
+		const activity = await listActivity(userId, projectId);
+		return { activity };
+	});
+
+	app.get("/api/research/documents", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const projectId = (request.query as { projectId?: string }).projectId;
+		const documents = await listDocuments(userId, projectId);
+		return { documents };
+	});
+
+	app.post("/api/research/documents", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as {
+			projectId?: string;
+			title?: string;
+			fileName?: string;
+			fileMime?: string;
+			fileData?: string;
+			sizeLabel?: string;
+		};
+		try {
+			const document = await createDocument(userId, body);
+			return { document };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.get<{ Params: { id: string } }>(
+		"/api/research/documents/:id/file",
+		async (request, reply) => {
+			const userId = await resolveUserId(request.headers.authorization);
+			if (!userId) return reply.code(401).send({ error: "Authentication required." });
+			const file = await getDocumentFile(request.params.id, userId);
+			if (!file) return reply.code(404).send({ error: "File not found." });
+			return { file };
+		},
+	);
+
+	app.delete<{ Params: { id: string } }>("/api/research/documents/:id", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const deleted = await deleteDocument(request.params.id, userId);
+		if (!deleted) return reply.code(404).send({ error: "Document not found." });
+		return { ok: true };
+	});
+
+	app.get("/api/research/notes", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const projectId = (request.query as { projectId?: string }).projectId;
+		const notes = await listNotes(userId, projectId);
+		return { notes };
+	});
+
+	app.post("/api/research/notes", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as { projectId?: string; title?: string; content?: string };
+		try {
+			const note = await createNote(userId, body);
+			return { note };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/research/notes/:id", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as { title?: string; content?: string };
+		try {
+			const note = await updateNote(request.params.id, userId, body);
+			if (!note) return reply.code(404).send({ error: "Note not found." });
+			return { note };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/research/notes/:id", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const deleted = await deleteNote(request.params.id, userId);
+		if (!deleted) return reply.code(404).send({ error: "Note not found." });
+		return { ok: true };
+	});
+
+	/** Research Note AI — project OpenRouter via llm.service (no BYO keys). */
+	app.post("/api/research-note/ai/generate", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+
+		const webRequest = new Request("http://localhost/api/research-note/ai/generate", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(request.body ?? {}),
+		});
+		const response = await handleResearchNoteGenerate(webRequest);
+		const payload = await response.json();
+		return reply.code(response.status).send(payload);
+	});
+
+	app.get("/api/research/references", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const projectId = (request.query as { projectId?: string }).projectId;
+		const references = await listReferences(userId, projectId);
+		return { references };
+	});
+
+	app.post("/api/research/references", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as {
+			projectId?: string;
+			title?: string;
+			citation?: string;
+			sourceUrl?: string;
+		};
+		try {
+			const reference = await createReference(userId, body);
+			return { reference };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/research/references/:id", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const deleted = await deleteReference(request.params.id, userId);
+		if (!deleted) return reply.code(404).send({ error: "Reference not found." });
+		return { ok: true };
+	});
+
+	app.get("/api/research/datasets", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const projectId = (request.query as { projectId?: string }).projectId;
+		const datasets = await listDatasets(userId, projectId);
+		return { datasets };
+	});
+
+	app.post("/api/research/datasets", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = request.body as {
+			projectId?: string;
+			title?: string;
+			description?: string;
+			discipline?: string;
+			format?: string;
+			year?: string;
+			license?: string;
+			accessUrl?: string;
+			sizeLabel?: string;
+			tags?: string[];
+			visibility?: "private" | "shared";
+			fileName?: string;
+			fileMime?: string;
+			fileData?: string;
+		};
+		try {
+			const dataset = await createDataset(userId, body);
+			return { dataset };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("Sign in") ? 401 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.get<{ Params: { id: string } }>("/api/research/datasets/:id", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const dataset = await getDataset(request.params.id, userId);
+		if (!dataset) return reply.code(404).send({ error: "Dataset not found." });
+		return { dataset };
+	});
+
+	app.get<{ Params: { id: string } }>("/api/research/datasets/:id/file", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const file = await getDatasetFile(request.params.id, userId);
+		if (!file) return reply.code(404).send({ error: "File not found." });
+		return { file };
+	});
+
+	app.post<{ Params: { id: string } }>("/api/research/datasets/:id/plot", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = (request.body ?? {}) as { chartType?: string; prompt?: string };
+		try {
+			const plot = await plotDatasetGraph(request.params.id, userId, body);
+			return { plot };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("Sign in") ? 401 : message.includes("not found") ? 404 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.post("/api/research/source-context", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = (request.body ?? {}) as { sources?: ResearchSourceSelection };
+		try {
+			const sourceContext = await buildResearchSourceContext(userId, body.sources);
+			return { sourceContext: sourceContext || "" };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.post("/api/research/visualizations", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const body = (request.body ?? {}) as {
+			datasetIds?: string[];
+			projectIds?: string[];
+			topic?: string;
+		};
+		try {
+			const artifacts = await buildPaperVisualizationArtifacts(userId, body);
+			return {
+				artifacts: artifacts.artifacts,
+				figureAppendix: artifacts.figureAppendix,
+				hasSavedFigures: artifacts.hasSavedFigures,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const status = message.includes("Sign in") ? 401 : 400;
+			return reply.code(status).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/research/datasets/:id", async (request, reply) => {
+		const userId = await resolveUserId(request.headers.authorization);
+		if (!userId) return reply.code(401).send({ error: "Authentication required." });
+		const deleted = await deleteDataset(request.params.id, userId);
+		if (!deleted) return reply.code(404).send({ error: "Dataset not found." });
 		return { ok: true };
 	});
 
@@ -1100,9 +1730,18 @@ export async function startServer(port: number): Promise<void> {
 
 	app.delete<{ Params: { id: string } }>("/api/admin/users/:id", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const adminId = await requireAdmin(request.headers.authorization);
 			const deleted = await adminDeleteUser(request.params.id);
 			if (!deleted) return reply.code(404).send({ error: "User not found." });
+			await recordAuditEvent({
+				action: "admin.user_deleted",
+				category: "admin",
+				actorId: adminId,
+				summary: `Deleted user ${request.params.id}`,
+				targetType: "user",
+				targetId: request.params.id,
+				severity: "medium",
+			});
 			return { ok: true };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
@@ -1278,8 +1917,17 @@ export async function startServer(port: number): Promise<void> {
 
 	app.post("/api/admin/backup", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const adminId = await requireAdmin(request.headers.authorization);
 			const file = await createDatabaseBackup();
+			await recordAuditEvent({
+				action: "admin.backup_created",
+				category: "system",
+				actorId: adminId,
+				summary: `Created database backup ${file.filename}`,
+				targetType: "backup",
+				targetId: file.filename,
+				details: { size: file.size, tableCount: file.tableCount },
+			});
 			return { file };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
@@ -1306,6 +1954,779 @@ export async function startServer(port: number): Promise<void> {
 			const message = error instanceof Error ? error.message : String(error);
 			const status = message.includes("not found") || message.includes("Invalid") ? 404 : 500;
 			return reply.code(status).send({ error: message });
+		}
+	});
+
+	/* ── Institutional AI governance ─────────────────────────────────── */
+
+	app.get("/api/admin/governance", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			return { dashboard: await getGovernanceDashboard() };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get("/api/admin/analytics", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			return { analytics: await getUsageAnalytics() };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get("/api/admin/policies", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const [policies, stats] = await Promise.all([listPolicies(), getPolicyStats()]);
+			return { policies, stats };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/policies", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				name?: string;
+				description?: string;
+				scope?: string;
+				target?: string;
+				effect?: string;
+				roles?: string[];
+				faculties?: string[];
+				enabled?: boolean;
+				priority?: number;
+			};
+			if (!body.name?.trim() || !body.scope || !body.target?.trim() || !body.effect) {
+				return reply.code(400).send({ error: "name, scope, target, and effect are required." });
+			}
+			const policy = await createPolicy(
+				{
+					name: body.name,
+					description: body.description,
+					scope: body.scope as "feature" | "dataset" | "tool" | "use_case" | "content",
+					target: body.target,
+					effect: body.effect as "permitted" | "restricted" | "blocked",
+					roles: body.roles,
+					faculties: body.faculties,
+					enabled: body.enabled,
+					priority: body.priority,
+				},
+				adminId,
+			);
+			return { policy };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/policies/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Partial<{
+				name: string;
+				description: string;
+				scope: "feature" | "dataset" | "tool" | "use_case" | "content";
+				target: string;
+				effect: "permitted" | "restricted" | "blocked";
+				roles: string[];
+				faculties: string[];
+				enabled: boolean;
+				priority: number;
+			}>;
+			const policy = await updatePolicy(request.params.id, body, adminId);
+			if (!policy) return reply.code(404).send({ error: "Policy not found." });
+			return { policy };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/admin/policies/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const deleted = await deletePolicy(request.params.id, adminId);
+			if (!deleted) return reply.code(404).send({ error: "Policy not found." });
+			return { ok: true };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/policies/evaluate", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				scope?: "feature" | "dataset" | "tool" | "use_case" | "content";
+				target?: string;
+				role?: string;
+				faculty?: string;
+			};
+			if (!body.scope || !body.target?.trim() || !body.role) {
+				return reply.code(400).send({ error: "scope, target, and role are required." });
+			}
+			const result = await evaluatePolicy({
+				scope: body.scope,
+				target: body.target,
+				role: body.role,
+				faculty: body.faculty,
+			});
+			return { result };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get<{
+		Querystring: { limit?: string; flagged?: string; category?: string; severity?: string; q?: string };
+	}>("/api/admin/audit", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const limit = Number.parseInt(request.query.limit ?? "100", 10);
+			const [logs, stats] = await Promise.all([
+				listAuditLogs({
+					limit: Number.isFinite(limit) ? limit : 100,
+					flaggedOnly: request.query.flagged === "1" || request.query.flagged === "true",
+					category: request.query.category,
+					severity: request.query.severity,
+					search: request.query.q,
+				}),
+				getAuditAlertStats(),
+			]);
+			return { logs, stats };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/audit", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				action?: string;
+				category?: string;
+				summary?: string;
+				details?: Record<string, unknown>;
+				severity?: "info" | "low" | "medium" | "high" | "critical";
+				flagged?: boolean;
+				flagReason?: string;
+			};
+			if (!body.action?.trim() || !body.category || !body.summary?.trim()) {
+				return reply.code(400).send({ error: "action, category, and summary are required." });
+			}
+			const log = await recordAuditEvent({
+				action: body.action,
+				category: body.category as
+					| "auth"
+					| "admin"
+					| "ai_use"
+					| "policy"
+					| "approval"
+					| "data"
+					| "security"
+					| "system"
+					| "report",
+				actorId: adminId,
+				summary: body.summary,
+				details: body.details,
+				severity: body.severity,
+				flagged: body.flagged,
+				flagReason: body.flagReason,
+				ip: request.ip,
+				userAgent: request.headers["user-agent"],
+			});
+			return { log };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.post<{ Params: { id: string } }>("/api/admin/audit/:id/flag", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				reason?: string;
+				severity?: "info" | "low" | "medium" | "high" | "critical";
+			};
+			if (!body.reason?.trim()) {
+				return reply.code(400).send({ error: "reason is required." });
+			}
+			const log = await flagAuditLog(request.params.id, body.reason, body.severity ?? "high");
+			if (!log) return reply.code(404).send({ error: "Audit log not found." });
+			return { log };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get<{ Querystring: { status?: string; kind?: string; limit?: string } }>(
+		"/api/admin/approvals",
+		async (request, reply) => {
+			try {
+				await requireAdmin(request.headers.authorization);
+				const limit = Number.parseInt(request.query.limit ?? "100", 10);
+				const [approvals, stats] = await Promise.all([
+					listApprovals({
+						status: request.query.status,
+						kind: request.query.kind,
+						limit: Number.isFinite(limit) ? limit : 100,
+					}),
+					getApprovalStats(),
+				]);
+				return { approvals, stats };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(500).send({ error: message });
+			}
+		},
+	);
+
+	app.post("/api/admin/approvals", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				title?: string;
+				description?: string;
+				kind?: "tool" | "dataset" | "use_case" | "model" | "integration";
+				justification?: string;
+				riskNotes?: string;
+				requesterId?: string;
+			};
+			if (!body.title?.trim() || !body.kind) {
+				return reply.code(400).send({ error: "title and kind are required." });
+			}
+			const approval = await createApproval(
+				{
+					title: body.title,
+					description: body.description,
+					kind: body.kind,
+					justification: body.justification,
+					riskNotes: body.riskNotes,
+					requesterId: body.requesterId || adminId,
+				},
+				adminId,
+			);
+			return { approval };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/approvals/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				status?: "under_review" | "approved" | "rejected" | "withdrawn";
+				reviewNotes?: string;
+			};
+			if (!body.status) {
+				return reply.code(400).send({ error: "status is required." });
+			}
+			const approval = await reviewApproval(
+				request.params.id,
+				{ status: body.status, reviewNotes: body.reviewNotes },
+				adminId,
+			);
+			if (!approval) return reply.code(404).send({ error: "Approval not found." });
+			return { approval };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.get("/api/admin/reports", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			return { reports: await listGovernanceReports() };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get<{ Params: { id: string } }>("/api/admin/reports/:id", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const report = await getGovernanceReport(request.params.id);
+			if (!report) return reply.code(404).send({ error: "Report not found." });
+			return { report };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/reports/generate", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = (request.body ?? {}) as {
+				audience?: "management" | "senate" | "both";
+				periodStart?: string;
+				periodEnd?: string;
+			};
+			const report = await generateGovernanceReport({
+				audience: body.audience ?? "both",
+				periodStart: body.periodStart,
+				periodEnd: body.periodEnd,
+				actorId: adminId,
+			});
+			return { report };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	/* ── Risk, compliance, incidents, AI inventory ───────────────────── */
+
+	app.get<{ Querystring: { status?: string; category?: string } }>("/api/admin/risks", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const [risks, stats] = await Promise.all([
+				listRisks({ status: request.query.status, category: request.query.category }),
+				getRiskStats(),
+			]);
+			return { risks, stats };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/risks", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				title?: string;
+				description?: string;
+				category?: string;
+				status?: string;
+				likelihood?: number;
+				impact?: number;
+				residualLikelihood?: number;
+				residualImpact?: number;
+				faculty?: string;
+				department?: string;
+				ownerName?: string;
+				controls?: string;
+				treatmentPlan?: string;
+			};
+			if (!body.title?.trim() || !body.category || body.likelihood == null || body.impact == null) {
+				return reply.code(400).send({ error: "title, category, likelihood, and impact are required." });
+			}
+			const risk = await createRisk(
+				{
+					title: body.title,
+					description: body.description,
+					category: body.category as
+						| "data_protection"
+						| "academic_integrity"
+						| "model_safety"
+						| "access_control"
+						| "third_party"
+						| "operational"
+						| "legal"
+						| "reputational",
+					status: body.status as "open" | "mitigating" | "accepted" | "closed" | undefined,
+					likelihood: body.likelihood,
+					impact: body.impact,
+					residualLikelihood: body.residualLikelihood,
+					residualImpact: body.residualImpact,
+					faculty: body.faculty,
+					department: body.department,
+					ownerName: body.ownerName,
+					controls: body.controls,
+					treatmentPlan: body.treatmentPlan,
+				},
+				adminId,
+			);
+			return { risk };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/risks/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			const risk = await updateRisk(request.params.id, body as never, adminId);
+			if (!risk) return reply.code(404).send({ error: "Risk not found." });
+			return { risk };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/admin/risks/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const deleted = await deleteRisk(request.params.id, adminId);
+			if (!deleted) return reply.code(404).send({ error: "Risk not found." });
+			return { ok: true };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get<{ Querystring: { framework?: string; status?: string } }>(
+		"/api/admin/compliance",
+		async (request, reply) => {
+			try {
+				await requireAdmin(request.headers.authorization);
+				const [controls, stats] = await Promise.all([
+					listComplianceControls({
+						framework: request.query.framework,
+						status: request.query.status,
+					}),
+					getComplianceStats(),
+				]);
+				return { controls, stats };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(500).send({ error: message });
+			}
+		},
+	);
+
+	app.post("/api/admin/compliance", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				code?: string;
+				title?: string;
+				description?: string;
+				framework?: string;
+				domain?: string;
+				priority?: string;
+				status?: "not_started" | "in_progress" | "compliant" | "gap" | "not_applicable";
+				ownerName?: string;
+				evidence?: string;
+				notes?: string;
+			};
+			if (!body.code?.trim() || !body.title?.trim() || !body.framework || !body.domain) {
+				return reply.code(400).send({ error: "code, title, framework, and domain are required." });
+			}
+			const control = await createComplianceControl(
+				{
+					code: body.code,
+					title: body.title,
+					description: body.description,
+					framework: body.framework as
+						| "nigeria_ai_act"
+						| "eu_ai_act"
+						| "ndpr"
+						| "institutional"
+						| "iso_42001"
+						| "unesco",
+					domain: body.domain as
+						| "transparency"
+						| "human_oversight"
+						| "data_governance"
+						| "accuracy_robustness"
+						| "privacy"
+						| "accountability"
+						| "fairness"
+						| "security",
+					priority: body.priority,
+					status: body.status,
+					ownerName: body.ownerName,
+					evidence: body.evidence,
+					notes: body.notes,
+				},
+				adminId,
+			);
+			return { control };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/compliance/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Partial<{
+				status: "not_started" | "in_progress" | "compliant" | "gap" | "not_applicable";
+				evidence: string;
+				ownerName: string;
+				priority: string;
+				notes: string;
+				nextReviewAt: string | null;
+			}>;
+			const control = await updateComplianceControl(request.params.id, body, adminId);
+			if (!control) return reply.code(404).send({ error: "Control not found." });
+			return { control };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/admin/compliance/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const deleted = await deleteComplianceControl(request.params.id, adminId);
+			if (!deleted) return reply.code(404).send({ error: "Control not found." });
+			return { ok: true };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get<{ Querystring: { status?: string; severity?: string; kind?: string } }>(
+		"/api/admin/incidents",
+		async (request, reply) => {
+			try {
+				await requireAdmin(request.headers.authorization);
+				const [incidents, stats] = await Promise.all([
+					listIncidents({
+						status: request.query.status,
+						severity: request.query.severity,
+						kind: request.query.kind,
+					}),
+					getIncidentStats(),
+				]);
+				return { incidents, stats };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(500).send({ error: message });
+			}
+		},
+	);
+
+	app.post("/api/admin/incidents", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				title?: string;
+				description?: string;
+				kind?: string;
+				severity?: string;
+				faculty?: string;
+				department?: string;
+				reportedByName?: string;
+				reportedByEmail?: string;
+				assigneeName?: string;
+				impactSummary?: string;
+				linkedAuditId?: string;
+			};
+			if (!body.title?.trim() || !body.kind) {
+				return reply.code(400).send({ error: "title and kind are required." });
+			}
+			const incident = await createIncident(
+				{
+					title: body.title,
+					description: body.description,
+					kind: body.kind as
+						| "policy_breach"
+						| "sensitive_data"
+						| "unauthorized_use"
+						| "model_failure"
+						| "third_party"
+						| "academic_misconduct"
+						| "other",
+					severity: body.severity as "low" | "medium" | "high" | "critical" | undefined,
+					faculty: body.faculty,
+					department: body.department,
+					reportedByName: body.reportedByName,
+					reportedByEmail: body.reportedByEmail,
+					assigneeName: body.assigneeName,
+					impactSummary: body.impactSummary,
+					linkedAuditId: body.linkedAuditId,
+				},
+				adminId,
+			);
+			return { incident };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/incidents/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			const incident = await updateIncident(request.params.id, body as never, adminId);
+			if (!incident) return reply.code(404).send({ error: "Incident not found." });
+			return { incident };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.get<{ Querystring: { status?: string; riskTier?: string } }>(
+		"/api/admin/inventory",
+		async (request, reply) => {
+			try {
+				await requireAdmin(request.headers.authorization);
+				const [systems, stats] = await Promise.all([
+					listAiSystems({
+						status: request.query.status,
+						riskTier: request.query.riskTier,
+					}),
+					getAiSystemStats(),
+				]);
+				return { systems, stats };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(500).send({ error: message });
+			}
+		},
+	);
+
+	app.post("/api/admin/inventory", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
+				return reply.code(400).send({ error: "name is required." });
+			}
+			const system = await createAiSystem(body as never, adminId);
+			return { system };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/inventory/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			const system = await updateAiSystem(request.params.id, body as never, adminId);
+			if (!system) return reply.code(404).send({ error: "System not found." });
+			return { system };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/admin/inventory/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const deleted = await deleteAiSystem(request.params.id, adminId);
+			if (!deleted) return reply.code(404).send({ error: "System not found." });
+			return { ok: true };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
 		}
 	});
 

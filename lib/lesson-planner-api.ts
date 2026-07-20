@@ -17,6 +17,10 @@ export async function fetchCourseOutlineFromApi(input: CourseOutlineInput): Prom
 			department: input.department,
 			departmentLabel: getDisciplineLabel(input.department),
 			level: input.level,
+			mode: input.mode ?? "outline",
+			...(input.standards?.trim() ? { standards: input.standards.trim() } : {}),
+			...(input.sourceMaterial?.trim() ? { sourceMaterial: input.sourceMaterial.trim() } : {}),
+			...(input.sessionCount ? { sessionCount: input.sessionCount } : {}),
 		}),
 	});
 
@@ -110,26 +114,27 @@ export async function persistCoursePlanToApi(input: {
 	level: string;
 	outline: string;
 	presentation?: CoursePresentation | null;
-}): Promise<SavedCoursePlan | null> {
-	try {
-		const res = await fetch(apiUrl("/api/lesson-planner/saved"), {
-			method: "POST",
-			headers: { "Content-Type": "application/json", ...authHeaders() },
-			body: JSON.stringify({
-				...(input.id ? { id: input.id } : {}),
-				title: input.title,
-				department: input.department,
-				level: input.level,
-				outline: input.outline,
-				...(input.presentation ? { presentation: coursePresentationForStorage(input.presentation) } : {}),
-			}),
-		});
-		if (!res.ok) return null;
-		const data = (await res.json()) as { plan?: SavedCoursePlanDto };
-		return data.plan ? mapSavedPlan(data.plan) : null;
-	} catch {
-		return null;
+}): Promise<SavedCoursePlan> {
+	const res = await fetch(apiUrl("/api/lesson-planner/saved"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({
+			...(input.id ? { id: input.id } : {}),
+			title: input.title,
+			department: input.department,
+			level: input.level,
+			outline: input.outline,
+			...(input.presentation ? { presentation: coursePresentationForStorage(input.presentation) } : {}),
+		}),
+	});
+	const data = (await res.json().catch(() => ({}))) as { plan?: SavedCoursePlanDto; error?: string };
+	if (!res.ok) {
+		throw new Error(data.error ?? `Could not save course plan (${res.status}).`);
 	}
+	if (!data.plan) {
+		throw new Error("Save succeeded but no course plan was returned.");
+	}
+	return mapSavedPlan(data.plan);
 }
 
 const MONGO_OBJECT_ID = /^[a-f0-9]{24}$/i;

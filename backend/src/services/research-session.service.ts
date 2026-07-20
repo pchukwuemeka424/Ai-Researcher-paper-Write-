@@ -9,6 +9,8 @@ export type ResearchIdeaInput = {
 	approach: string;
 	type: string;
 	feasibility: string;
+	outline?: string;
+	researchQuestions?: string[];
 };
 
 export type ResearchIdeaSessionDto = {

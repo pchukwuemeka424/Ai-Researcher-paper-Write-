@@ -9,6 +9,27 @@ import type {
 	UpdateTokenInput,
 } from "@/lib/admin";
 import type {
+	AiSystemRecord,
+	AiSystemStats,
+	ApprovalRequestRecord,
+	ApprovalStats,
+	AuditAlertStats,
+	AuditLogRecord,
+	ComplianceControlRecord,
+	ComplianceStats,
+	GovernanceDashboard,
+	GovernanceIncidentRecord,
+	GovernancePolicyRecord,
+	GovernanceReportAudience,
+	GovernanceReportRecord,
+	GovernanceRiskRecord,
+	IncidentStats,
+	PolicyEvaluation,
+	PolicyStats,
+	RiskStats,
+	UsageAnalytics,
+} from "@/lib/admin-governance";
+import type {
 	CreateUserInput,
 	DashboardStats,
 	RecentSessionTopic,
@@ -252,4 +273,366 @@ export function exportUsersCsv(users: UserRecord[]): void {
 	link.download = `aula-users-${new Date().toISOString().slice(0, 10)}.csv`;
 	link.click();
 	URL.revokeObjectURL(url);
+}
+
+/* ── Governance APIs ─────────────────────────────────────────────────── */
+
+export async function fetchGovernanceDashboard(): Promise<GovernanceDashboard> {
+	const data = await adminJson<{ dashboard: GovernanceDashboard }>("/api/admin/governance");
+	return data.dashboard;
+}
+
+export async function fetchUsageAnalytics(): Promise<UsageAnalytics> {
+	const data = await adminJson<{ analytics: UsageAnalytics }>("/api/admin/analytics");
+	return data.analytics;
+}
+
+export async function fetchAdminPolicies(): Promise<{
+	policies: GovernancePolicyRecord[];
+	stats: PolicyStats;
+}> {
+	const data = await adminJson<{ policies: GovernancePolicyRecord[]; stats: PolicyStats }>(
+		"/api/admin/policies",
+	);
+	return { policies: data.policies ?? [], stats: data.stats! };
+}
+
+export async function createAdminPolicy(input: {
+	name: string;
+	description?: string;
+	scope: string;
+	target: string;
+	effect: string;
+	roles?: string[];
+	faculties?: string[];
+	enabled?: boolean;
+	priority?: number;
+}): Promise<GovernancePolicyRecord> {
+	const data = await adminJson<{ policy: GovernancePolicyRecord }>("/api/admin/policies", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.policy;
+}
+
+export async function updateAdminPolicy(
+	id: string,
+	input: Partial<{
+		name: string;
+		description: string;
+		scope: string;
+		target: string;
+		effect: string;
+		roles: string[];
+		faculties: string[];
+		enabled: boolean;
+		priority: number;
+	}>,
+): Promise<GovernancePolicyRecord> {
+	const data = await adminJson<{ policy: GovernancePolicyRecord }>(`/api/admin/policies/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.policy;
+}
+
+export async function deleteAdminPolicy(id: string): Promise<void> {
+	await adminJson(`/api/admin/policies/${id}`, { method: "DELETE" });
+}
+
+export async function evaluateAdminPolicy(input: {
+	scope: string;
+	target: string;
+	role: string;
+	faculty?: string;
+}): Promise<PolicyEvaluation> {
+	const data = await adminJson<{ result: PolicyEvaluation }>("/api/admin/policies/evaluate", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.result;
+}
+
+export async function fetchAdminAuditLogs(params?: {
+	limit?: number;
+	flagged?: boolean;
+	category?: string;
+	severity?: string;
+	q?: string;
+}): Promise<{ logs: AuditLogRecord[]; stats: AuditAlertStats }> {
+	const qs = new URLSearchParams();
+	if (params?.limit) qs.set("limit", String(params.limit));
+	if (params?.flagged) qs.set("flagged", "1");
+	if (params?.category) qs.set("category", params.category);
+	if (params?.severity) qs.set("severity", params.severity);
+	if (params?.q) qs.set("q", params.q);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ logs: AuditLogRecord[]; stats: AuditAlertStats }>(
+		`/api/admin/audit${suffix}`,
+	);
+	return { logs: data.logs ?? [], stats: data.stats! };
+}
+
+export async function flagAdminAuditLog(
+	id: string,
+	reason: string,
+	severity?: string,
+): Promise<AuditLogRecord> {
+	const data = await adminJson<{ log: AuditLogRecord }>(`/api/admin/audit/${id}/flag`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ reason, severity }),
+	});
+	return data.log;
+}
+
+export async function fetchAdminApprovals(params?: {
+	status?: string;
+	kind?: string;
+}): Promise<{ approvals: ApprovalRequestRecord[]; stats: ApprovalStats }> {
+	const qs = new URLSearchParams();
+	if (params?.status) qs.set("status", params.status);
+	if (params?.kind) qs.set("kind", params.kind);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ approvals: ApprovalRequestRecord[]; stats: ApprovalStats }>(
+		`/api/admin/approvals${suffix}`,
+	);
+	return { approvals: data.approvals ?? [], stats: data.stats! };
+}
+
+export async function createAdminApproval(input: {
+	title: string;
+	description?: string;
+	kind: string;
+	justification?: string;
+	riskNotes?: string;
+}): Promise<ApprovalRequestRecord> {
+	const data = await adminJson<{ approval: ApprovalRequestRecord }>("/api/admin/approvals", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.approval;
+}
+
+export async function reviewAdminApproval(
+	id: string,
+	input: { status: string; reviewNotes?: string },
+): Promise<ApprovalRequestRecord> {
+	const data = await adminJson<{ approval: ApprovalRequestRecord }>(`/api/admin/approvals/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.approval;
+}
+
+export async function fetchAdminReports(): Promise<GovernanceReportRecord[]> {
+	const data = await adminJson<{ reports: GovernanceReportRecord[] }>("/api/admin/reports");
+	return data.reports ?? [];
+}
+
+export async function fetchAdminReport(id: string): Promise<GovernanceReportRecord> {
+	const data = await adminJson<{ report: GovernanceReportRecord }>(`/api/admin/reports/${id}`);
+	return data.report;
+}
+
+export async function generateAdminReport(input: {
+	audience: GovernanceReportAudience;
+	periodStart?: string;
+	periodEnd?: string;
+}): Promise<GovernanceReportRecord> {
+	const data = await adminJson<{ report: GovernanceReportRecord }>("/api/admin/reports/generate", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.report;
+}
+
+export function exportGovernanceReportText(report: GovernanceReportRecord): void {
+	const lines = [
+		report.title,
+		`Audience: ${report.audience}`,
+		`Period: ${report.periodStart.slice(0, 10)} — ${report.periodEnd.slice(0, 10)}`,
+		`Generated: ${report.createdAt}`,
+		"",
+		"SUMMARY",
+		report.summary,
+		"",
+		...report.sections.flatMap((section) => [section.heading, section.body, ""]),
+	];
+	const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8;" });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = `governance-report-${report.audience}-${report.createdAt.slice(0, 10)}.txt`;
+	link.click();
+	URL.revokeObjectURL(url);
+}
+
+/* ── Risk / compliance / incidents / inventory ───────────────────────── */
+
+export async function fetchAdminRisks(params?: {
+	status?: string;
+	category?: string;
+}): Promise<{ risks: GovernanceRiskRecord[]; stats: RiskStats }> {
+	const qs = new URLSearchParams();
+	if (params?.status) qs.set("status", params.status);
+	if (params?.category) qs.set("category", params.category);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ risks: GovernanceRiskRecord[]; stats: RiskStats }>(
+		`/api/admin/risks${suffix}`,
+	);
+	return { risks: data.risks ?? [], stats: data.stats! };
+}
+
+export async function createAdminRisk(input: Record<string, unknown>): Promise<GovernanceRiskRecord> {
+	const data = await adminJson<{ risk: GovernanceRiskRecord }>("/api/admin/risks", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.risk;
+}
+
+export async function updateAdminRisk(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<GovernanceRiskRecord> {
+	const data = await adminJson<{ risk: GovernanceRiskRecord }>(`/api/admin/risks/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.risk;
+}
+
+export async function deleteAdminRisk(id: string): Promise<void> {
+	await adminJson(`/api/admin/risks/${id}`, { method: "DELETE" });
+}
+
+export async function fetchAdminCompliance(params?: {
+	framework?: string;
+	status?: string;
+}): Promise<{ controls: ComplianceControlRecord[]; stats: ComplianceStats }> {
+	const qs = new URLSearchParams();
+	if (params?.framework) qs.set("framework", params.framework);
+	if (params?.status) qs.set("status", params.status);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ controls: ComplianceControlRecord[]; stats: ComplianceStats }>(
+		`/api/admin/compliance${suffix}`,
+	);
+	return { controls: data.controls ?? [], stats: data.stats! };
+}
+
+export async function createAdminCompliance(
+	input: Record<string, unknown>,
+): Promise<ComplianceControlRecord> {
+	const data = await adminJson<{ control: ComplianceControlRecord }>("/api/admin/compliance", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.control;
+}
+
+export async function updateAdminCompliance(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<ComplianceControlRecord> {
+	const data = await adminJson<{ control: ComplianceControlRecord }>(`/api/admin/compliance/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.control;
+}
+
+export async function deleteAdminCompliance(id: string): Promise<void> {
+	await adminJson(`/api/admin/compliance/${id}`, { method: "DELETE" });
+}
+
+export async function fetchAdminIncidents(params?: {
+	status?: string;
+	severity?: string;
+}): Promise<{ incidents: GovernanceIncidentRecord[]; stats: IncidentStats }> {
+	const qs = new URLSearchParams();
+	if (params?.status) qs.set("status", params.status);
+	if (params?.severity) qs.set("severity", params.severity);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ incidents: GovernanceIncidentRecord[]; stats: IncidentStats }>(
+		`/api/admin/incidents${suffix}`,
+	);
+	return { incidents: data.incidents ?? [], stats: data.stats! };
+}
+
+export async function createAdminIncident(
+	input: Record<string, unknown>,
+): Promise<GovernanceIncidentRecord> {
+	const data = await adminJson<{ incident: GovernanceIncidentRecord }>("/api/admin/incidents", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.incident;
+}
+
+export async function updateAdminIncident(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<GovernanceIncidentRecord> {
+	const data = await adminJson<{ incident: GovernanceIncidentRecord }>(
+		`/api/admin/incidents/${id}`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.incident;
+}
+
+export async function fetchAdminInventory(params?: {
+	status?: string;
+	riskTier?: string;
+}): Promise<{ systems: AiSystemRecord[]; stats: AiSystemStats }> {
+	const qs = new URLSearchParams();
+	if (params?.status) qs.set("status", params.status);
+	if (params?.riskTier) qs.set("riskTier", params.riskTier);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ systems: AiSystemRecord[]; stats: AiSystemStats }>(
+		`/api/admin/inventory${suffix}`,
+	);
+	return { systems: data.systems ?? [], stats: data.stats! };
+}
+
+export async function createAdminInventorySystem(
+	input: Record<string, unknown>,
+): Promise<AiSystemRecord> {
+	const data = await adminJson<{ system: AiSystemRecord }>("/api/admin/inventory", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.system;
+}
+
+export async function updateAdminInventorySystem(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<AiSystemRecord> {
+	const data = await adminJson<{ system: AiSystemRecord }>(`/api/admin/inventory/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.system;
+}
+
+export async function deleteAdminInventorySystem(id: string): Promise<void> {
+	await adminJson(`/api/admin/inventory/${id}`, { method: "DELETE" });
 }

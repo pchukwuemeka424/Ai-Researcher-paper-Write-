@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
-import { AULA_DEADLINES, AULA_TASKS, type TaskItem } from "@/lib/aula-nav";
+import { NavIcon } from "@/components/aula/NavIcon";
+import { useAuth } from "@/hooks/useAuth";
+import { AULA_QUICK_ACCESS } from "@/lib/aula-nav";
+import { researchTokenAllowance } from "@/lib/student-tokens";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
 
@@ -20,8 +24,11 @@ function MiniCalendar() {
 	for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
 	return (
-		<section className="aula-panel-widget">
-			<h3 className="aula-panel-widget-title">{monthLabel}</h3>
+		<section className="aula-panel-widget aula-panel-cal">
+			<div className="aula-panel-widget-head">
+				<h3 className="aula-panel-widget-title">{monthLabel}</h3>
+				<span className="aula-panel-cal-today-label">Today {today}</span>
+			</div>
 			<div className="aula-cal-grid" role="grid" aria-label="Calendar">
 				{WEEKDAYS.map((d) => (
 					<span key={d} className="aula-cal-weekday" role="columnheader">
@@ -46,58 +53,84 @@ function MiniCalendar() {
 	);
 }
 
-export function AulaRightPanel() {
-	const [tasks, setTasks] = useState<TaskItem[]>(AULA_TASKS);
-	const doneCount = tasks.filter((t) => t.done).length;
+function TokenWidget() {
+	const { user } = useAuth();
+	const [mounted, setMounted] = useState(false);
 
-	const toggleTask = (id: string) => {
-		setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-	};
+	useEffect(() => {
+		setMounted(true);
+	}, []);
+
+	if (!mounted || !user) return null;
+
+	const allowance = user.tokenQuota?.allowance ?? researchTokenAllowance(user.role) ?? 0;
+	const remaining = user.tokenQuota?.remaining ?? allowance;
+	const used = Math.max(0, allowance - remaining);
+	const percent = allowance > 0 ? Math.min(100, Math.round((used / allowance) * 100)) : 0;
 
 	return (
-		<aside className="aula-panel" aria-label="Dashboard widgets">
-			<MiniCalendar />
+		<section className="aula-panel-widget aula-panel-tokens">
+			<div className="aula-panel-widget-head">
+				<h3 className="aula-panel-widget-title">Token balance</h3>
+			</div>
+			<p className="aula-panel-token-value">{remaining.toLocaleString()}</p>
+			<p className="aula-panel-token-meta">
+				{allowance > 0 ? `${percent}% of ${allowance.toLocaleString()} used` : "No allocation set"}
+			</p>
+			{allowance > 0 && (
+				<div className="aula-panel-token-track" aria-hidden>
+					<span className="aula-panel-token-fill" style={{ width: `${percent}%` }} />
+				</div>
+			)}
+		</section>
+	);
+}
 
-			<section className="aula-panel-widget">
-				<h3 className="aula-panel-widget-title">Upcoming deadlines</h3>
-				<ul className="aula-deadline-list">
-					{AULA_DEADLINES.map((item) => (
-						<li key={item.id} className="aula-deadline-item">
-							<div>
-								<p className="aula-deadline-title">{item.title}</p>
-								<p className="aula-deadline-due">{item.dueLabel}</p>
-							</div>
-							<span className={`aula-deadline-badge aula-deadline-badge-${item.urgency}`}>
-								{item.urgency === "urgent" ? "3 days left" : item.urgency === "soon" ? "7 days left" : "14 days left"}
-							</span>
+export function AulaRightPanel() {
+	return (
+		<aside className="aula-panel" aria-label="Dashboard widgets">
+			<section className="aula-panel-widget aula-panel-shortcuts">
+				<div className="aula-panel-widget-head">
+					<h3 className="aula-panel-widget-title">Quick links</h3>
+				</div>
+				<ul className="aula-panel-link-list">
+					{AULA_QUICK_ACCESS.map((tool) => (
+						<li key={tool.id}>
+							<Link href={tool.href} className="aula-panel-link">
+								<span className={`aula-panel-link-icon aula-quick-icon-${tool.iconColor}`} aria-hidden>
+									<NavIcon id={tool.id} size={14} />
+								</span>
+								<span className="aula-panel-link-label">{tool.label}</span>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+									<path d="m9 18 6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+								</svg>
+							</Link>
 						</li>
 					))}
+					<li>
+						<Link href="/research/saved" className="aula-panel-link">
+							<span className="aula-panel-link-icon aula-quick-icon-teal" aria-hidden>
+								<NavIcon id="notes" size={14} />
+							</span>
+							<span className="aula-panel-link-label">Saved papers</span>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+								<path d="m9 18 6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+							</svg>
+						</Link>
+					</li>
 				</ul>
 			</section>
 
+			<TokenWidget />
+			<MiniCalendar />
+
 			<section className="aula-panel-widget">
-				<div className="aula-tasks-head">
-					<h3 className="aula-panel-widget-title">Tasks</h3>
-					<span className="aula-tasks-count">
-						{doneCount} / {tasks.length} completed
-					</span>
+				<div className="aula-panel-widget-head">
+					<h3 className="aula-panel-widget-title">Focus</h3>
 				</div>
-				<div className="aula-tasks-progress" role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={tasks.length}>
-					<span style={{ width: `${(doneCount / tasks.length) * 100}%` }} />
-				</div>
-				<ul className="aula-task-list">
-					{tasks.map((task) => (
-						<li key={task.id}>
-							<label className="aula-task-item">
-								<input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} />
-								<span className={task.done ? "aula-task-done" : undefined}>{task.label}</span>
-							</label>
-						</li>
-					))}
-				</ul>
-				<button type="button" className="aula-task-add" aria-label="Add task">
-					+
-				</button>
+				<p className="aula-panel-empty">
+					Use Lesson Planner for teaching sessions and Research Assistant for cited paper drafts.
+				</p>
 			</section>
 		</aside>
 	);

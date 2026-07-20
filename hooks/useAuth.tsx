@@ -23,7 +23,8 @@ type AuthContextValue = {
 	login: (input: LoginInput) => Promise<AuthUser>;
 	register: (input: RegisterInput) => Promise<AuthUser>;
 	registerStudent: (input: StudentRegisterInput) => Promise<AuthUser>;
-	logout: () => void;
+	/** Clears the session and navigates to `redirectTo` (default `/login`). Pass `false` to stay on the current page. */
+	logout: (redirectTo?: string | false) => void;
 	refreshUser: () => Promise<void>;
 	setTokenQuota: (quota: StudentTokenQuota) => void;
 };
@@ -103,9 +104,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		return data.user;
 	}, []);
 
-	const logout = useCallback(() => {
+	const logout = useCallback((redirectTo?: string | false) => {
 		clearStoredToken();
 		setUser(null);
+		// Call sites may use onClick={logout}; React then passes a SyntheticEvent.
+		// Only treat real string | false as a redirect override.
+		const dest =
+			redirectTo === false ? false : typeof redirectTo === "string" ? redirectTo : "/login";
+		if (dest === false) return;
+		// Hard navigate so protected shells never stick on a blank "Loading…" state
+		// after the session is cleared (App Router soft replace can fail mid-unmount).
+		window.location.assign(dest);
 	}, []);
 
 	const setTokenQuota = useCallback((quota: StudentTokenQuota) => {

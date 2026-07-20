@@ -4,7 +4,7 @@ import { SavedResearchRoutePage } from "@/components/research/SavedResearchRoute
 
 export const metadata = {
 	title: "Saved research",
-	description: "Browse saved research papers and bookmarked ideas.",
+	description: "Browse saved research papers and ideas by topic, with created and updated dates.",
 };
 
 export default function LecturerSavedResearchPage() {

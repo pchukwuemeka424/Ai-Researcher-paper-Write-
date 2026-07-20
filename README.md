@@ -6,7 +6,7 @@ AI-powered academic research and paper writing platform built for Nigerian stude
 
 ## Overview
 
-**TrustLed Aula** helps students and lecturers with every stage of academic research:
+**Governed AI for Higher Institutions (GAHI)** helps students and lecturers with every stage of academic research:
 
 - Research idea generation and evaluation
 - Structured research outline creation (grounded in real papers)

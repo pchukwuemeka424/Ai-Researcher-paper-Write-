@@ -7,6 +7,7 @@ export type GenerateResearchIdeasInput = {
 	disciplineLabel: string;
 	topic: string;
 	scope: ResearchScope;
+	sourceContext?: string;
 };
 
 export type ResearchScopeAnalysis = {
@@ -111,82 +112,58 @@ function normalizeContextAndGap(raw: Partial<ResearchContextAndGap>, topic: stri
 	};
 }
 
-async function runScopeAnalyst(
+async function runScopeAndContextAnalyst(
 	input: GenerateResearchIdeasInput,
 	options?: { signal?: AbortSignal },
-): Promise<{ analysis: ResearchScopeAnalysis; usage?: TokenUsage }> {
+): Promise<{ scope: ResearchScopeAnalysis; contextAndGap: ResearchContextAndGap; usage?: TokenUsage }> {
 	const scopeLabel = SCOPE_LABELS[input.scope];
 	const { text, usage } = await completeOpenRouterChat(
 		[
 			{
 				role: "system",
 				content:
-					"You are Agent 1: Research Scope Analyst. You identify discipline, research area, and measurable variables/constructs/phenomena from a scholar's interest statement. Return ONLY valid JSON — no markdown.",
+					"You analyse a scholar's interest into scope (discipline, variables) and context (population, gap). Return ONLY valid JSON — no markdown.",
 			},
 			{
 				role: "user",
 				content: `Analyse this ${scopeLabel}-level interest in ${input.disciplineLabel}.
 
 Interest statement: "${input.topic.trim()}"
+${input.sourceContext ? `\nSelected research note / source material:\n${input.sourceContext}\n\nIMPORTANT: Prefer the research note's suggested interest topic, title, and focus when present. Use its notebook content, data, findings, and figures to identify variables, context, evidence, and research gaps. Align analysis with that note rather than inventing an unrelated topic.` : ""}
 
 Return JSON:
 {
-  "discipline": "confirmed or refined discipline",
-  "researchArea": "specific sub-field or problem space (not a vague theme)",
-  "variables": ["independent, dependent, moderating, or control variables"],
-  "constructs": ["theoretical constructs or latent factors"],
-  "phenomena": ["observable phenomena or outcomes of interest"]
+  "scope": {
+    "discipline": "confirmed or refined discipline",
+    "researchArea": "specific sub-field or problem space (not a vague theme)",
+    "variables": ["independent, dependent, moderating, or control variables"],
+    "constructs": ["theoretical constructs or latent factors"],
+    "phenomena": ["observable phenomena or outcomes of interest"]
+  },
+  "contextAndGap": {
+    "population": "who or what is studied (sample frame, units of analysis)",
+    "context": "setting — geography, institution, sector, time period",
+    "domain": "applied domain or field of practice",
+    "researchGap": "specific gap, limitation, controversy, trend, or emerging issue this study could address"
+  }
 }
 
-Be specific. If the user gave a vague theme, infer realistic variables and phenomena that would make it researchable.`,
+Be specific and researchable. Prefer concrete populations/contexts (including Nigerian/African higher education when relevant).`,
 			},
 		],
-		{ signal: options?.signal, maxTokens: 900, model: getOpenRouterFastModel() },
+		{ signal: options?.signal, maxTokens: 1200, model: getOpenRouterFastModel() },
 	);
 
-	const parsed = extractJsonObject<Partial<ResearchScopeAnalysis>>(text);
-	return { analysis: normalizeScopeAnalysis(parsed, input.disciplineLabel, input.topic), usage };
-}
+	const parsed = extractJsonObject<{
+		scope?: Partial<ResearchScopeAnalysis>;
+		contextAndGap?: Partial<ResearchContextAndGap>;
+	}>(text);
 
-async function runContextAndGapAnalyst(
-	input: GenerateResearchIdeasInput,
-	scopeAnalysis: ResearchScopeAnalysis,
-	options?: { signal?: AbortSignal },
-): Promise<{ analysis: ResearchContextAndGap; usage?: TokenUsage }> {
-	const scopeLabel = SCOPE_LABELS[input.scope];
-	const { text, usage } = await completeOpenRouterChat(
-		[
-			{
-				role: "system",
-				content:
-					"You are Agent 2: Context & Gap Analyst. You identify population, setting, domain, and a defensible research gap. Return ONLY valid JSON — no markdown.",
-			},
-			{
-				role: "user",
-				content: `For a ${scopeLabel} study in ${scopeAnalysis.discipline}:
-
-Interest: "${input.topic.trim()}"
-Research area: ${scopeAnalysis.researchArea}
-Variables: ${scopeAnalysis.variables.join("; ") || "not yet specified"}
-Constructs: ${scopeAnalysis.constructs.join("; ") || "not yet specified"}
-Phenomena: ${scopeAnalysis.phenomena.join("; ") || "not yet specified"}
-
-Return JSON:
-{
-  "population": "who or what is studied (sample frame, units of analysis)",
-  "context": "setting — geography, institution, sector, time period",
-  "domain": "applied domain or field of practice",
-  "researchGap": "specific gap, limitation, controversy, trend, or emerging issue this study could address"
-}
-
-Prefer realistic, researchable populations and contexts. For Nigerian/African higher education contexts when relevant, be concrete.`,
-			},
-		],
-		{ signal: options?.signal, maxTokens: 900, model: getOpenRouterFastModel() },
-	);
-
-	const parsed = extractJsonObject<Partial<ResearchContextAndGap>>(text);
-	return { analysis: normalizeContextAndGap(parsed, input.topic), usage };
+	return {
+		scope: normalizeScopeAnalysis(parsed.scope ?? {}, input.disciplineLabel, input.topic),
+		contextAndGap: normalizeContextAndGap(parsed.contextAndGap ?? {}, input.topic),
+		usage,
+	};
 }
 
 function buildTitleFormulatorPrompt(
@@ -196,7 +173,7 @@ function buildTitleFormulatorPrompt(
 ): string {
 	const scopeLabel = SCOPE_LABELS[input.scope];
 
-	return `You are Agent 3: Title Formulator. Generate exactly 6 distinct, publishable research study titles.
+	return `You are an academic Title Formulator and quality reviewer. Generate exactly 3 distinct, publishable research study titles.
 
 ${TITLE_QUALITY_RULES}
 
@@ -212,6 +189,7 @@ Scholar profile:
 - Domain: ${contextAnalysis.domain}
 - Research gap: ${contextAnalysis.researchGap}
 - Original interest: "${input.topic.trim()}"
+${input.sourceContext ? `\nUser-selected research note / source material:\n${input.sourceContext}\n\nGround every title, rationale, approach, outline, and research question in this material. If the note includes a suggested interest topic or study title, refine that into publishable academic titles (do not ignore it for an unrelated theme). Use the note's data, findings, and methods where relevant. Do not claim that a source says something it does not say.` : ""}
 
 For each idea use this exact markdown structure:
 
@@ -220,12 +198,27 @@ For each idea use this exact markdown structure:
 **Feasibility:** High | Moderate | Exploratory
 **Rationale:** [1–2 sentences linking to the research gap and why this is feasible at ${scopeLabel} level]
 **Approach:** [Brief methodology naming design, data source, and analysis]
+**Outline:**
+- [Problem framing]
+- [Variables / constructs / gap]
+- [Design and data]
+- [Analysis plan]
+- [Expected contributions]
+**Research questions:**
+1. [Specific academic research question ending with ?]
+2. [Specific academic research question ending with ?]
+3. [Specific academic research question ending with ?]
+4. [Specific academic research question ending with ?]
+5. [Specific academic research question ending with ?]
+(Provide 5 to 7 numbered research questions)
 
 Requirements:
 - Match ambition to ${scopeLabel} level
 - Each title must name variables/population/context — never a theme label alone
-- Vary study types across the 6 ideas
-- Do not ask clarifying questions — output all 6 ideas directly`;
+- Each idea MUST include a concise outline and 5–7 academic research questions
+- Self-check: rewrite any vague title before returning
+- Vary study types across the 3 ideas
+- Do not ask clarifying questions — output all 3 ideas directly`;
 }
 
 async function runTitleFormulator(
@@ -239,49 +232,11 @@ async function runTitleFormulator(
 			{
 				role: "system",
 				content:
-					"You formulate rigorous, specific academic research titles. Never output vague theme titles. Follow the user's markdown format exactly.",
+					"You formulate rigorous, specific academic research titles with outlines and research questions. Never output vague theme titles. Follow the user's markdown format exactly.",
 			},
 			{ role: "user", content: buildTitleFormulatorPrompt(input, scopeAnalysis, contextAnalysis) },
 		],
-		{ signal: options?.signal, maxTokens: 2200, model: getOpenRouterFastModel() },
-	);
-
-	return { markdown: text.trim(), usage };
-}
-
-async function runQualityGate(
-	input: GenerateResearchIdeasInput,
-	draftMarkdown: string,
-	scopeAnalysis: ResearchScopeAnalysis,
-	contextAnalysis: ResearchContextAndGap,
-	options?: { signal?: AbortSignal },
-): Promise<{ markdown: string; usage?: TokenUsage }> {
-	const scopeLabel = SCOPE_LABELS[input.scope];
-	const { text, usage } = await completeOpenRouterChat(
-		[
-			{
-				role: "system",
-				content:
-					"You are Agent 4: Quality Gate. Reject vague theme titles and rewrite any that lack variables, population, or context. Return the final markdown only — same ### structure.",
-			},
-			{
-				role: "user",
-				content: `Review these ${scopeLabel}-level research ideas for ${scopeAnalysis.discipline}.
-
-${TITLE_QUALITY_RULES}
-
-Required anchors (titles must reflect these):
-- Population: ${contextAnalysis.population}
-- Context: ${contextAnalysis.context}
-- Gap: ${contextAnalysis.researchGap}
-
-Draft ideas:
-${draftMarkdown}
-
-If any title is too vague, rewrite it to be specific and publishable. Keep exactly 6 ideas in the same markdown format. Output only the corrected ideas — no commentary.`,
-			},
-		],
-		{ signal: options?.signal, maxTokens: 2400, model: getOpenRouterFastModel() },
+		{ signal: options?.signal, maxTokens: 3200, model: getOpenRouterFastModel() },
 	);
 
 	return { markdown: text.trim(), usage };
@@ -291,12 +246,9 @@ export async function generateResearchIdeas(
 	input: GenerateResearchIdeasInput,
 	options?: { signal?: AbortSignal },
 ): Promise<GenerateResearchIdeasResult> {
-	const { analysis: scope, usage: u1 } = await runScopeAnalyst(input, options);
-	const { analysis: contextAndGap, usage: u2 } = await runContextAndGapAnalyst(input, scope, options);
-	const { markdown: draft, usage: u3 } = await runTitleFormulator(input, scope, contextAndGap, options);
-	const { markdown: finalMarkdown, usage: u4 } = await runQualityGate(
+	const { scope, contextAndGap, usage: u1 } = await runScopeAndContextAnalyst(input, options);
+	const { markdown: finalMarkdown, usage: u2 } = await runTitleFormulator(
 		input,
-		draft,
 		scope,
 		contextAndGap,
 		options,
@@ -305,6 +257,6 @@ export async function generateResearchIdeas(
 	return {
 		ideasMarkdown: finalMarkdown,
 		analysis: { scope, contextAndGap },
-		usage: mergeUsage(mergeUsage(mergeUsage(u1, u2), u3), u4),
+		usage: mergeUsage(u1, u2),
 	};
 }

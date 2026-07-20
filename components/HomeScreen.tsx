@@ -213,7 +213,7 @@ export function HomeScreen() {
 								<Link href="/dashboard" className="ghost-btn">
 									Dashboard
 								</Link>
-								<button type="button" className="ghost-btn" onClick={logout}>
+								<button type="button" className="ghost-btn" onClick={() => logout(false)}>
 									Sign out
 								</button>
 							</>

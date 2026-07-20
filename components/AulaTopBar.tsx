@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { TopbarDecoBubbles } from "@/components/TopbarDecoBubbles";
 import { NavIcon } from "@/components/aula/NavIcon";
 import { IconPlus } from "@/components/lesson-planner/LessonPlannerIcons";
 import { AULA_TOPBAR_NAV, aulaTopbarContext, isAulaTopbarItemActive, type AulaTopbarNavItem } from "@/lib/aula-nav";
@@ -23,7 +22,7 @@ function TopbarNavLink({ item }: { item: AulaTopbarNavItem }) {
 			aria-current={active ? "page" : undefined}
 		>
 			<span className="aula-topbar-nav-icon" aria-hidden>
-				<NavIcon id={item.id} size={16} />
+				<NavIcon id={item.id} size={15} />
 			</span>
 			{item.label}
 		</Link>
@@ -36,7 +35,6 @@ export function AulaTopBar({ onMenuClick }: Props) {
 
 	return (
 		<header className="aula-topbar">
-			<TopbarDecoBubbles />
 			<button type="button" className="aula-menu-btn" aria-label="Open navigation" onClick={onMenuClick}>
 				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
 					<path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />

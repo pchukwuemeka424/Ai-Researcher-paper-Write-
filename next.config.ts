@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
 	turbopack: {
 		root: import.meta.dirname,
 	},
+	// Ideas / outline generation can exceed the default ~30s rewrite proxy timeout.
+	experimental: {
+		proxyTimeout: 180_000,
+	},
 	async rewrites() {
 		if (process.env.NODE_ENV !== "development") {
 			return [];

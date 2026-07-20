@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 import {
 	SidebarBrand,
@@ -21,15 +21,13 @@ type Props = {
 
 export function AdminSidebar({ id = "admin-sidebar", className, onNavigate }: Props) {
 	const pathname = usePathname();
-	const router = useRouter();
 	const { user, logout } = useAuth();
 
 	if (!user) return null;
 
 	const handleLogout = () => {
-		logout();
 		onNavigate?.();
-		router.replace(ADMIN_LOGIN_PATH);
+		logout(ADMIN_LOGIN_PATH);
 	};
 
 	return (

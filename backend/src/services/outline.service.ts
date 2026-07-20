@@ -1,4 +1,4 @@
-import { getOpenRouterFastModel } from "../config/env.js";
+import { getOpenRouterOutlineModel } from "../config/env.js";
 import type { TokenUsage } from "../types/token-usage.js";
 import { fetchPapersForQuery, type AlphaXivPaper } from "./alphaxiv.service.js";
 import { completeOpenRouterChat } from "./llm.service.js";
@@ -9,6 +9,8 @@ export type OutlineIdeaInput = {
 	approach: string;
 	type: string;
 	feasibility: string;
+	outline?: string;
+	researchQuestions?: string[];
 };
 
 export type ResearchScope = "undergraduate" | "masters" | "doctoral" | "faculty";
@@ -18,6 +20,9 @@ export type GenerateOutlineInput = {
 	disciplineLabel: string;
 	topic: string;
 	scope: ResearchScope;
+	sourceContext?: string;
+	/** Faster outline when research-note evidence is already attached. */
+	fast?: boolean;
 };
 
 const SCOPE_LABELS: Record<ResearchScope, string> = {
@@ -41,7 +46,7 @@ const FEASIBILITY_LABELS: Record<string, string> = {
 };
 
 /** Max words for the outline body; "Sources for further reading" is added separately. */
-export const OUTLINE_BODY_MAX_WORDS = 1500;
+export const OUTLINE_BODY_MAX_WORDS = 2200;
 
 function formatPapersForOutlineContext(papers: AlphaXivPaper[]): string {
 	if (papers.length === 0) {
@@ -66,39 +71,85 @@ function buildOutlinePrompt(input: GenerateOutlineInput, paperContext: string): 
 	const scopeLabel = SCOPE_LABELS[scope] ?? scope;
 	const typeLabel = TYPE_LABELS[idea.type] ?? idea.type;
 	const feasibilityLabel = FEASIBILITY_LABELS[idea.feasibility] ?? idea.feasibility;
+	const needsHypothesis =
+		idea.type === "empirical" || idea.type === "applied" || idea.type === "interdisciplinary";
+	const priorQuestions = (idea.researchQuestions ?? []).filter((q) => q.trim().length > 8);
+	const priorOutline = idea.outline?.trim() ?? "";
 
-	return `You are an academic research advisor. Create a detailed research outline for a ${scopeLabel}-level project in ${disciplineLabel}.
+	return `You are a senior academic research methodologist and thesis supervisor. Write a rigorous, publication-ready research OUTLINE for a ${scopeLabel}-level project in ${disciplineLabel}.
 
 **Broad interest area:** ${topic.trim()}
-**Selected research question:** ${idea.title}
+**Selected study title / focus:** ${idea.title}
 **Type:** ${typeLabel}
 **Feasibility:** ${feasibilityLabel}
 **Rationale:** ${idea.rationale}
 **Suggested approach:** ${idea.approach}
+${priorQuestions.length ? `\n**Candidate research questions (refine/improve as needed):**\n${priorQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}` : ""}
+${priorOutline ? `\n**Candidate focus points:**\n${priorOutline}` : ""}
+${input.sourceContext ? `\n**User-selected research note / source material:**\n${input.sourceContext}\n\nUse this private material as the primary grounding for the study title focus, problem statement, methodology, and expected findings. Align the outline with the research note's suggested interest topic/title and content. Clearly distinguish user-provided data/findings from published literature.` : ""}
 
-Use the following retrieved papers as primary sources for the literature review section. Do not invent papers outside this list.
+Use the following retrieved papers as primary sources for the literature review. Do not invent papers outside this list. Cite them as Author (year) only.
 
 ${paperContext}
 
-Return a structured Markdown outline with these sections (use bold section titles on their own lines and bullet/numbered lists only — do not use markdown tables or pipe characters):
+Return a structured Markdown outline with these sections IN THIS EXACT ORDER.
+Use bold section titles on their own lines (e.g. **1. Introduction**). Use bold subsection labels where shown. Use bullet/numbered lists — never markdown tables or pipe characters.
+
 **Research Outline**
-**Overview** (discipline, scope, research type, feasibility, interest area)
-**Research question**
-**Background and significance**
-**Objectives** (numbered list)
-**Literature review themes** (bullet list — cite papers by author and year only, e.g. Smith (2021))
-**Methodology**
-**Expected contributions** (bullet list)
-**Suggested timeline** (use **Phase** subheadings with paragraph descriptions, not tables)
+
+**1. Introduction**
+Write three labeled subsections as short academic paragraphs (not one-line stubs):
+- **Background:** Situate the topic in ${disciplineLabel}; define key constructs; establish why the topic matters now.
+- **Problem statement:** State a clear research problem / knowledge deficit with variables, population, and setting where relevant.
+- **Significance:** Explain scholarly, practical, and/or policy importance at the ${scopeLabel} level.
+
+**2. Research questions**
+Numbered list of 5–7 investigable academic research questions (see rules below). Do not paste only the study title.
+
+**3. Hypotheses**
+${
+	needsHypothesis
+		? `For this ${typeLabel.toLowerCase()} study, provide numbered testable hypotheses aligned to the main questions (directional or H0/H1). Mark any purely descriptive question as a proposition rather than a statistical hypothesis.`
+		: `State **Not applicable** for statistical hypotheses, then offer 2–4 theoretical propositions if useful for this ${typeLabel.toLowerCase()} design.`
+}
+
+**4. Objectives**
+- One **general objective** paragraph
+- Numbered **specific objectives** (3–6) that map to the research questions
+
+**5. Literature review**
+Three labeled parts:
+- **Themes:** Organised strands of prior work (cite Author (year) from the paper list)
+- **Framework:** Named theoretical/conceptual framework and how it organises the study
+- **Gap:** Precise gap this outline will address (methods, context, population, or theory)
+
+**6. Methodology**
+Cover: research design; population/sample; data collection; data analysis; ethical considerations. Be concrete and feasible for ${scopeLabel}.
+
+**7. Expected contributions**
+Bullets for theoretical, empirical, and/or practical contributions.
+
+**8. Scope and limitations**
+Bullets for study boundaries and acknowledged limitations.
+
+**9. Suggested timeline**
+Use **Phase** subheadings with short paragraph descriptions (not tables), calibrated to ${scopeLabel}.
+
+Research-question rules:
+- Clear, specific, answerable at the ${scopeLabel} level
+- Name key variables/constructs and, where relevant, population/setting
+- Prefer interrogative form ending with "?"
+- Align with ${typeLabel} methods
+- Coherent set: one overarching question plus focused sub-questions
 
 Do NOT include a "Sources for further reading" section — it will be added separately.
-Do NOT mention preprint servers, repository names, or ID numbers anywhere in the outline.
+Do NOT mention preprint servers, repository names, or ID numbers.
 Do not use markdown tables.
-Use bold-only section titles (e.g. **Research question**) — never hash (#) headings or horizontal rules (---, --).
+Use bold-only section titles — never hash (#) headings or horizontal rules.
 
-Keep the entire outline body to at most ${OUTLINE_BODY_MAX_WORDS} words (excluding any sources section). Be concise: short paragraphs, focused bullet points, no filler.
+Keep the outline body to at most ${OUTLINE_BODY_MAX_WORDS} words (excluding any sources section). Prefer substantive paragraphs in Introduction and Literature review over filler.
 
-Be specific to the question and discipline. Do not ask clarifying questions — deliver the full outline directly.`;
+Deliver the full outline directly — no prefatory commentary.`;
 }
 
 function formatPaperAuthors(authors: string[]): string {
@@ -133,6 +184,7 @@ function stripArxivMetaFromOutline(outline: string): string {
 		.replace(/\barXiv preprint\b[^.\n]*\.?/gi, "")
 		.replace(/\barXiv:\s*[\d.]+[a-z]?\b/gi, "")
 		.replace(/^.*\b(retrieved from|papers were found via)\b.*\n?/gim, "")
+		.replace(/<!--\s*aula-outline:local\s*-->/gi, "")
 		.trim();
 }
 
@@ -179,22 +231,27 @@ export async function generateResearchOutline(
 		.filter(Boolean)
 		.join(" ");
 
-	const papers = await fetchPapersForQuery(searchQuery, { limit: 8, signal: options?.signal });
+	const fast = Boolean(input.fast || input.sourceContext?.trim());
+	const paperLimit = fast ? 4 : 8;
+	const maxTokens = fast ? 2200 : 4000;
+
+	const papers = await fetchPapersForQuery(searchQuery, { limit: paperLimit, signal: options?.signal });
 	const paperContext = formatPapersForOutlineContext(papers);
 
 	const { text: rawOutline, usage } = await completeOpenRouterChat(
 		[
 			{
 				role: "system",
-				content:
-					"You write rigorous academic research outlines in Markdown. Use bold-only section titles on their own lines — never hash (#) headings. Use the provided papers for literature themes only. Never mention preprint servers, repository names, or paper ID numbers in the outline text. Keep the outline body under 1500 words before any sources section.",
+				content: fast
+					? "You write concise academic research outlines in Markdown. Use bold-only section titles. Structure: **1. Introduction**, **2. Research questions**, **3. Hypotheses**, **4. Objectives**, **5. Literature review**, **6. Methodology**, **7. Expected contributions**, **8. Scope and limitations**, **9. Suggested timeline**. Prefer brevity when user evidence is supplied. Cite Author (year) only. Keep under 1200 words before sources."
+					: "You write rigorous, supervisor-quality academic research outlines in Markdown. Use bold-only section titles on their own lines — never hash (#) headings. Always structure: **1. Introduction** (Background, Problem statement, Significance as paragraphs), **2. Research questions** (5–7 numbered questions), **3. Hypotheses** (or Not applicable + propositions), **4. Objectives**, **5. Literature review** (Themes, Framework, Gap), **6. Methodology**, **7. Expected contributions**, **8. Scope and limitations**, **9. Suggested timeline**. Never paste only a study title as the research question. Use provided papers for literature review only; cite Author (year). Never mention preprint servers, repository names, or paper IDs. Keep the body under 2200 words before sources.",
 			},
 			{
 				role: "user",
 				content: buildOutlinePrompt(input, paperContext),
 			},
 		],
-		{ signal: options?.signal, maxTokens: 2400, model: getOpenRouterFastModel() },
+		{ signal: options?.signal, maxTokens, model: getOpenRouterOutlineModel() },
 	);
 
 	const outline = injectEmbeddedSourcesSection(rawOutline.trim(), papers);

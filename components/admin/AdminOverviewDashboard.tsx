@@ -41,7 +41,7 @@ export function AdminOverviewDashboard() {
 	return (
 		<AdminShell
 			title="Overview"
-			subtitle="Platform health and recent activity"
+			subtitle="Platform health and institutional AI governance"
 			breadcrumb="Admin Console"
 		>
 			{loading && <p className="muted">Loading overview…</p>}
@@ -61,6 +61,20 @@ export function AdminOverviewDashboard() {
 					/>
 				</section>
 			)}
+
+			<section className="admin-gov-banner">
+				<div>
+					<p className="admin-gov-banner-kicker">Institutional oversight</p>
+					<h2 className="admin-gov-banner-title">Govern AI use in research</h2>
+					<p className="admin-gov-banner-copy">
+						Analytics by faculty and cohort, policy controls, immutable audit logs, approval workflows, and
+						Management / Senate reporting — in one console.
+					</p>
+				</div>
+				<Link href="/admin/governance" className="primary-btn">
+					Open AI Governance
+				</Link>
+			</section>
 
 			<section className="admin-quick-links">
 				{quickLinks.map((item) => {

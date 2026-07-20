@@ -1,5 +1,5 @@
 /**
- * TrustLed Aula — global color tokens.
+ * GAHI — global color tokens.
  * TypeScript mirror: lib/colors.ts (keep both files in sync).
  */
 
@@ -51,8 +51,8 @@
   --color-icon-research-fg: #7c3aed;
   --color-icon-references-bg: #dcfce7;
   --color-icon-references-fg: #16a34a;
-  --color-icon-lesson-planner-bg: #e0e7ff;
-  --color-icon-lesson-planner-fg: #4f46e5;
+  --color-icon-lesson-planner-bg: #fce8ef;
+  --color-icon-lesson-planner-fg: #711738;
   --color-icon-chat-bg: #ffedd5;
   --color-icon-chat-fg: #ea580c;
   --color-icon-admin-bg: #f1f5f9;
@@ -65,21 +65,21 @@
   --color-icon-default-fg: #64748b;
 
   /* —— Feature accents —— */
-  --color-research-accent: #4f46e5;
-  --color-research-accent-hover: #4338ca;
-  --color-research-accent-light: #6366f1;
-  --color-research-accent-muted: rgba(79, 70, 229, 0.1);
-  --color-research-accent-glow: rgba(99, 102, 241, 0.2);
-  --color-research-hero: #1e1b4b;
+  --color-research-accent: #0D0B61;
+  --color-research-accent-hover: #12108a;
+  --color-research-accent-light: #1a1780;
+  --color-research-accent-muted: rgba(13, 11, 97, 0.1);
+  --color-research-accent-glow: rgba(13, 11, 97, 0.18);
+  --color-research-hero: #060549;
 
-  --color-lp-accent: #4f46e5;
-  --color-lp-accent-hover: #4338ca;
-  --color-lp-accent-light: #6366f1;
-  --color-lp-accent-muted: rgba(79, 70, 229, 0.1);
-  --color-lp-accent-glow: rgba(99, 102, 241, 0.12);
-  --color-lp-hero-from: #0D0B61;
-  --color-lp-hero-via: #1e1b4b;
-  --color-lp-hero-to: #312e81;
+  --color-lp-accent: #711738;
+  --color-lp-accent-hover: #5a1230;
+  --color-lp-accent-light: #8a1f48;
+  --color-lp-accent-muted: rgba(113, 23, 56, 0.1);
+  --color-lp-accent-glow: rgba(113, 23, 56, 0.14);
+  --color-lp-hero-from: #711738;
+  --color-lp-hero-via: #8a1f48;
+  --color-lp-hero-to: #4a0f25;
 
   --color-login-accent: #7c3aed;
   --color-login-accent-hover: #6d28d9;
@@ -145,14 +145,20 @@
   --aula-navy-light: rgba(255, 255, 255, 0.1);
   --aula-navy-active: var(--color-secondary);
   --aula-blue: var(--color-secondary);
-  --aula-bg: #f0f2f5;
+  --aula-bg: #eef1f6;
   --aula-surface: var(--color-white);
-  --aula-border: #e5e8ed;
+  --aula-border: #e2e8f0;
   --aula-text: var(--color-ink);
-  --aula-muted: #6b7280;
+  --aula-muted: #64748b;
   --aula-active: var(--color-primary);
   --aula-active-hover: var(--color-primary-hover);
   --aula-active-soft: var(--color-primary-soft);
+  --aula-rail: #810b38;
+  --aula-rail-soft: rgba(129, 11, 56, 0.08);
+  --aula-accent-lesson: #711738;
+  --aula-accent-research: var(--color-primary);
+  --aula-accent-ref: #0f766e;
+  --aula-accent-token: #b45309;
 }
 
 /* —— Sidebar —— */
@@ -190,17 +196,20 @@
 
 /* —— Research assistant —— */
 .research-page {
-  --research-accent: var(--color-icon-research-fg);
-  --research-accent-hover: var(--color-research-accent-hover);
-  --research-accent-light: var(--color-research-accent-light);
-  --research-accent-muted: var(--color-icon-research-bg);
-  --research-accent-glow: var(--color-research-accent-glow);
-  --research-hero-bg: var(--color-research-hero);
+  --research-accent: var(--color-primary);
+  --research-accent-hover: var(--color-primary-hover);
+  --research-accent-light: #1a1780;
+  --research-accent-muted: var(--color-primary-soft);
+  --research-accent-glow: var(--color-primary-muted);
+  --research-hero-bg: var(--color-primary-dark);
+  --research-rail: #810b38;
   --research-surface: var(--aula-surface, var(--color-white));
   --research-border: var(--aula-border, var(--color-slate-200));
   --research-border-strong: var(--color-slate-300);
   --research-text: var(--aula-text, var(--color-slate-900));
   --research-muted: var(--aula-muted, var(--color-slate-500));
+  --research-frame: #0a7c6e;
+  --research-frame-soft: rgba(10, 124, 110, 0.08);
 }
 
 /* —— Lesson planner —— */

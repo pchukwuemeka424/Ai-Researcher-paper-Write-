@@ -17,19 +17,6 @@ export type QuickAccessTool = AulaNavItem & {
 	iconColor: "blue" | "green" | "purple" | "orange" | "pink" | "teal";
 };
 
-export type DeadlineItem = {
-	id: string;
-	title: string;
-	dueLabel: string;
-	urgency: "urgent" | "soon" | "ok";
-};
-
-export type TaskItem = {
-	id: string;
-	label: string;
-	done: boolean;
-};
-
 /** Tools shown on /dashboard quick access — sidebar nav is derived from this list. */
 export const AULA_QUICK_ACCESS: QuickAccessTool[] = [
 	{
@@ -38,6 +25,13 @@ export const AULA_QUICK_ACCESS: QuickAccessTool[] = [
 		href: "/research",
 		description: "Develop research ideas with cited references in your house style.",
 		iconColor: "blue",
+	},
+	{
+		id: "research-note",
+		label: "Research Note",
+		href: "/research/note",
+		description: "Notes, data, lab log, and AI drafts in one notebook.",
+		iconColor: "teal",
 	},
 	{
 		id: "references",
@@ -50,15 +44,8 @@ export const AULA_QUICK_ACCESS: QuickAccessTool[] = [
 		id: "lesson-planner",
 		label: "Lesson Planner",
 		href: "/lesson-planner",
-		description: "Generate a level-aligned course outline from your title in minutes.",
-		iconColor: "purple",
-	},
-	{
-		id: "chat",
-		label: "AI Chat",
-		href: "/dashboard/chat",
-		description: "Draft academic papers and research with governed AI assistance.",
-		iconColor: "orange",
+		description: "Build course outlines, session plans, activity sheets, and rubrics.",
+		iconColor: "pink",
 	},
 ];
 
@@ -81,7 +68,7 @@ export type AulaTopbarContext = {
 
 const AULA_TOPBAR_DEFAULT: AulaTopbarContext = {
 	title: "Lecture Studio",
-	tagline: "Plan, schedule, and deliver world-class lectures",
+	tagline: "Teaching and research workspace for higher institutions",
 	cta: { label: "New Lecture", href: "/lesson-planner" },
 };
 
@@ -109,18 +96,18 @@ export const AULA_TOPBAR_NAV: AulaTopbarNavItem[] = [
 		description: AULA_QUICK_ACCESS.find((t) => t.id === "research")?.description,
 	},
 	{
+		id: "research-note",
+		label: "Notes",
+		href: "/research/note",
+		match: "prefix",
+		description: AULA_QUICK_ACCESS.find((t) => t.id === "research-note")?.description,
+	},
+	{
 		id: "references",
 		label: "References",
 		href: "/references",
 		match: "prefix",
 		description: AULA_QUICK_ACCESS.find((t) => t.id === "references")?.description,
-	},
-	{
-		id: "chat",
-		label: "Chat",
-		href: "/dashboard/chat",
-		match: "prefix",
-		description: "Draft academic papers and research with governed AI assistance.",
 	},
 ];
 
@@ -129,6 +116,11 @@ export function isAulaTopbarItemActive(pathname: string, item: AulaTopbarNavItem
 
 	if (item.id === "research" && (pathname === "/dashboard/research" || pathname.startsWith("/dashboard/research/"))) {
 		return true;
+	}
+
+	// Keep Research Assistant active only on its routes — not Research Note.
+	if (item.id === "research" && (pathname === "/research/note" || pathname.startsWith("/research/note/"))) {
+		return false;
 	}
 
 	if (item.match === "prefix") {
@@ -142,7 +134,6 @@ function topbarTitleForItem(item: AulaTopbarNavItem): string {
 	if (item.id === "dashboard") return AULA_TOPBAR_DEFAULT.title;
 	const tool = AULA_QUICK_ACCESS.find((t) => t.id === item.id);
 	if (tool) return tool.label;
-	if (item.id === "chat") return "AI Chat";
 	return item.label;
 }
 
@@ -152,10 +143,10 @@ function topbarCtaForItem(item: AulaTopbarNavItem): AulaTopbarContext["cta"] {
 			return { label: "New Lecture", href: "/lesson-planner" };
 		case "research":
 			return { label: "New Research", href: "/research" };
+		case "research-note":
+			return { label: "New Research Note", href: "/research/note" };
 		case "references":
 			return { label: "Format Reference", href: "/references" };
-		case "chat":
-			return { label: "New Chat", href: "/dashboard/chat" };
 		default:
 			return AULA_TOPBAR_DEFAULT.cta;
 	}
@@ -195,19 +186,6 @@ export const AULA_ADMIN_ITEM: AulaNavItem = {
 };
 
 export const AULA_NAV_GROUPS: AulaNavGroup[] = [AULA_MAIN_NAV];
-
-export const AULA_DEADLINES: DeadlineItem[] = [
-	{ id: "1", title: "Data Structures Assignment", dueLabel: "Due May 18", urgency: "urgent" },
-	{ id: "2", title: "Research Paper Draft", dueLabel: "Due May 22", urgency: "soon" },
-	{ id: "3", title: "Final Project Submission", dueLabel: "Due May 29", urgency: "ok" },
-];
-
-export const AULA_TASKS: TaskItem[] = [
-	{ id: "1", label: "Finalize Week 9 lesson plan", done: true },
-	{ id: "2", label: "Update reference list for paper", done: false },
-	{ id: "3", label: "Prepare rubric for assignment 3", done: false },
-	{ id: "4", label: "Schedule office hours", done: false },
-];
 
 export function aulaHrefPath(href: string): string {
 	return href.split("#")[0] ?? href;

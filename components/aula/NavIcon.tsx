@@ -20,6 +20,13 @@ export function NavIcon({ id, size = 18 }: Props) {
 					<path d="m21 21-4.3-4.3" strokeLinecap="round" />
 				</svg>
 			);
+		case "research-note":
+			return (
+				<svg {...props}>
+					<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+					<path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" strokeLinecap="round" />
+				</svg>
+			);
 		case "references":
 			return (
 				<svg {...props}>
@@ -68,12 +75,6 @@ export function NavIcon({ id, size = 18 }: Props) {
 					<path d="M4 6h16M4 12h16M4 18h10" strokeLinecap="round" />
 				</svg>
 			);
-		case "chat":
-			return (
-				<svg {...props}>
-					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" strokeLinejoin="round" />
-				</svg>
-			);
 		case "tokens":
 			return (
 				<svg {...props}>
@@ -93,6 +94,76 @@ export function NavIcon({ id, size = 18 }: Props) {
 					<ellipse cx="12" cy="5" rx="8" ry="3" />
 					<path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
 					<path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+				</svg>
+			);
+		case "governance":
+			return (
+				<svg {...props}>
+					<path d="M12 3l8 4v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z" strokeLinejoin="round" />
+					<path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+				</svg>
+			);
+		case "analytics":
+			return (
+				<svg {...props}>
+					<path d="M4 19V5M4 19h16" strokeLinecap="round" />
+					<path d="M8 15v-4M12 15V8M16 15v-7" strokeLinecap="round" />
+				</svg>
+			);
+		case "policy":
+			return (
+				<svg {...props}>
+					<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+					<path d="M14 2v6h6M9 13h6M9 17h4" strokeLinecap="round" />
+				</svg>
+			);
+		case "audit":
+			return (
+				<svg {...props}>
+					<path d="M12 3l8 4v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z" strokeLinejoin="round" />
+					<circle cx="12" cy="11" r="2.5" />
+					<path d="M12 13.5V16" strokeLinecap="round" />
+				</svg>
+			);
+		case "approvals":
+			return (
+				<svg {...props}>
+					<path d="M9 11l3 3L22 4" strokeLinecap="round" strokeLinejoin="round" />
+					<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" strokeLinecap="round" />
+				</svg>
+			);
+		case "reports":
+			return (
+				<svg {...props}>
+					<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" strokeLinecap="round" />
+				</svg>
+			);
+		case "risk":
+			return (
+				<svg {...props}>
+					<path d="M12 3l9 16H3L12 3z" strokeLinejoin="round" />
+					<path d="M12 10v4M12 17h.01" strokeLinecap="round" />
+				</svg>
+			);
+		case "compliance":
+			return (
+				<svg {...props}>
+					<path d="M9 11l3 3L22 4" strokeLinecap="round" strokeLinejoin="round" />
+					<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" strokeLinecap="round" />
+				</svg>
+			);
+		case "incident":
+			return (
+				<svg {...props}>
+					<circle cx="12" cy="12" r="9" />
+					<path d="M12 8v5M12 16h.01" strokeLinecap="round" />
+				</svg>
+			);
+		case "inventory":
+			return (
+				<svg {...props}>
+					<path d="M3 7h18v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+					<path d="M3 7l2-3h14l2 3M8 12h8" strokeLinecap="round" />
 				</svg>
 			);
 		default:

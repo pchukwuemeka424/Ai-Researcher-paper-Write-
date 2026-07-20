@@ -10,7 +10,8 @@ import { StudentLayout } from "@/components/StudentLayout";
 import { studentHasResearchTokens } from "@/components/StudentTokenQuota";
 import { IconFileText } from "@/components/ui/ButtonIcon";
 import { useAuth } from "@/hooks/useAuth";
-import { DEFAULT_CITATION_STYLE, type CitationStyle } from "@/lib/citation-styles";
+import { saveChatCitationStyle } from "@/lib/chat-research-citations";
+import { type CitationStyle } from "@/lib/citation-styles";
 import { getDisciplineLabel } from "@/lib/research-disciplines";
 import { researchPaperWorkspacePath } from "@/lib/research-generate-routes";
 import { peekOutlinePageContext, resolveOutlinePageContext } from "@/lib/research-outline-context";
@@ -33,7 +34,7 @@ function ResearchGenerateContent({ variant = "lecturer" }: Props) {
 	const [outline, setOutline] = useState<string | null>(() =>
 		key && context ? loadSavedOutline(context.idea, context.discipline, context.topic, context.scope) : null,
 	);
-	const [citationStyle, setCitationStyle] = useState<CitationStyle>(DEFAULT_CITATION_STYLE);
+	const [citationStyle, setCitationStyle] = useState<CitationStyle | "">("");
 
 	const researchPath = isStudent ? "/student/research" : "/research";
 	const backHref = context?.returnTo?.trim() || researchPath;
@@ -51,7 +52,7 @@ function ResearchGenerateContent({ variant = "lecturer" }: Props) {
 	}, [key]);
 
 	const handleGenerate = () => {
-		if (!context || !hasTokens) return;
+		if (!context || !hasTokens || !citationStyle) return;
 		stagePendingResearchPaper({
 			key,
 			citationStyle,
@@ -100,10 +101,22 @@ function ResearchGenerateContent({ variant = "lecturer" }: Props) {
 					should be formatted.
 				</p>
 
-				<CitationStyleSelect id="research-generate-style" value={citationStyle} onChange={setCitationStyle} />
+				<CitationStyleSelect
+					id="research-generate-style"
+					value={citationStyle}
+					onChange={(style) => {
+						setCitationStyle(style);
+						if (style) saveChatCitationStyle(style);
+					}}
+				/>
 
 				<div className="research-generate-modal-outline-note">
-					{outline?.trim() ? (
+					{context.sources?.projectIds?.length ? (
+						<p>
+							A research note is selected — the paper will be drafted from that note (title, abstract, results,
+							and saved figures). No separate outline will be generated.
+						</p>
+					) : outline?.trim() ? (
 						<p>Your saved research outline will guide section structure, methodology, and literature themes.</p>
 					) : (
 						<p>
@@ -118,8 +131,14 @@ function ResearchGenerateContent({ variant = "lecturer" }: Props) {
 						type="button"
 						className={btnPrimaryClass}
 						onClick={handleGenerate}
-						disabled={!hasTokens}
-						title={!hasTokens ? "Research token limit reached" : undefined}
+						disabled={!hasTokens || !citationStyle}
+						title={
+							!hasTokens
+								? "Research token limit reached"
+								: !citationStyle
+									? "Select a reference style"
+									: undefined
+						}
 					>
 						<IconFileText size={14} />
 						Generate paper

@@ -261,7 +261,12 @@ export function ReferenceFormatter() {
 				</div>
 
 				<div className="ref-control-bar">
-					<CitationStyleSelect value={style} onChange={setStyle} />
+					<CitationStyleSelect
+						value={style}
+						onChange={(next) => {
+							if (next) setStyle(next);
+						}}
+					/>
 					<div className="ref-mode-tabs" role="tablist" aria-label="Input mode">
 						<button
 							type="button"

@@ -1,5 +1,3 @@
-import type { AuthUser } from "@/lib/auth";
-
 export type StudentNavItem = {
 	id: string;
 	label: string;
@@ -20,6 +18,12 @@ export const STUDENT_NAV_ITEMS: StudentNavItem[] = [
 		label: "Research Assistant",
 		href: "/student/research",
 		description: "Generate and save research ideas for your projects.",
+	},
+	{
+		id: "research-note",
+		label: "Research Note",
+		href: "/student/research/note",
+		description: "Notes, data, lab log, and AI drafts in one notebook.",
 	},
 	{
 		id: "references",

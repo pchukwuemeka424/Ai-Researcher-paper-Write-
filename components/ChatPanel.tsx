@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import ReactMarkdown from "react-markdown";
 
 import type { ChatMessage } from "@/lib/agent-events";
 import { APP_NAME } from "@/lib/brand";
 import { promoteBoldSectionsForDisplay } from "@/lib/research-paper-sections";
 import { formatTokenUsage } from "@/lib/token-usage";
+import { ResearchPaperMarkdown } from "@/components/research/ResearchPaperMarkdown";
 
 const SUGGESTIONS = [
 	"The impact of large language models on academic integrity in higher education",
@@ -113,21 +113,7 @@ export function ChatPanel({ messages, isBusy, onSuggestionClick }: Props) {
 							{msg.role === "assistant" ? (
 								msg.content.trim() ? (
 									<div className="chat-paper-markdown">
-										<ReactMarkdown
-											components={{
-												img: () => null,
-												a: ({ href, children }) => (
-													<a href={href} target="_blank" rel="noopener noreferrer">
-														{children}
-													</a>
-												),
-												h3: ({ children }) => (
-													<h3 className="paper-section-heading">{children}</h3>
-												),
-											}}
-										>
-											{promoteBoldSectionsForDisplay(msg.content)}
-										</ReactMarkdown>
+										<ResearchPaperMarkdown content={promoteBoldSectionsForDisplay(msg.content)} />
 									</div>
 								) : (
 									<GeneratingBody label={generatingLabel} detail={generatingDetail} />

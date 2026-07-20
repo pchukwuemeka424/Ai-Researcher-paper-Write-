@@ -9,10 +9,16 @@ export type TeachingLevel =
 	| "postgraduate"
 	| "professional";
 
+export type LessonOutputMode = "outline" | "session" | "activities" | "rubric";
+
 export type GenerateCourseOutlineInput = {
 	title: string;
 	departmentLabel: string;
 	level: TeachingLevel;
+	mode?: LessonOutputMode;
+	standards?: string;
+	sourceMaterial?: string;
+	sessionCount?: number;
 };
 
 const LEVEL_LABELS: Record<TeachingLevel, string> = {
@@ -48,19 +54,104 @@ const SESSIONS_BY_LEVEL: Record<TeachingLevel, number> = {
 	professional: 8,
 };
 
+function optionalContextBlock(input: GenerateCourseOutlineInput): string {
+	const parts: string[] = [];
+	if (input.standards?.trim()) {
+		parts.push(
+			`**Curriculum / standards to align with:**\n${input.standards.trim()}\n\nAlign outcomes, activities, and language to these standards where relevant.`,
+		);
+	}
+	if (input.sourceMaterial?.trim()) {
+		parts.push(
+			`**Source material provided by the lecturer (use as grounding; do not invent conflicting facts):**\n${input.sourceMaterial.trim().slice(0, 6000)}`,
+		);
+	}
+	return parts.length ? `\n${parts.join("\n\n")}\n` : "";
+}
+
 function buildPrompt(input: GenerateCourseOutlineInput): string {
+	const mode = input.mode ?? "outline";
 	const levelLabel = LEVEL_LABELS[input.level] ?? input.level;
-	const sessions = SESSIONS_BY_LEVEL[input.level] ?? 12;
+	const sessions =
+		input.sessionCount && input.sessionCount > 0
+			? Math.min(24, Math.max(4, Math.round(input.sessionCount)))
+			: (SESSIONS_BY_LEVEL[input.level] ?? 12);
 	const guidance = LEVEL_GUIDANCE[input.level] ?? "";
+	const context = optionalContextBlock(input);
 
-	return `You are an expert university curriculum designer. Create a full **course outline** for higher education, calibrated to the teaching level below.
+	const sharedHeader = `You are an expert university curriculum designer. Create teaching materials for higher education, calibrated to the teaching level below.
 
-**Course title:** ${input.title.trim()}
+**Course / topic title:** ${input.title.trim()}
 **Department:** ${input.departmentLabel.trim()}
 **Teaching level:** ${levelLabel}
 
 Level guidance: ${guidance}
+${context}`;
 
+	if (mode === "session") {
+		return `${sharedHeader}
+Create a **single 50–90 minute session plan** on this topic. Return structured Markdown using bold-only section titles on their own lines — never hash (#) headings or horizontal rules.
+
+Include these sections in order:
+
+**Session overview** (purpose, duration suggestion, prerequisites)
+
+**Intended learning outcomes** (3–5 measurable outcomes for this session)
+
+**Session structure** (timed segments: open → teach → practice → consolidate; include minutes)
+
+**Teaching & learning activities** (concrete activities students do; note materials needed)
+
+**Formative check** (how to gauge understanding mid/end of session)
+
+**Differentiation** (support and stretch)
+
+**Follow-up / independent study** (short, specific)
+
+Be specific to the title and department. Use UK/university terminology. Deliver the complete plan directly.`;
+	}
+
+	if (mode === "activities") {
+		return `${sharedHeader}
+Create a **printable activity sheet** for students on this topic. Return structured Markdown using bold-only section titles on their own lines — never hash (#) headings or horizontal rules.
+
+Include these sections in order:
+
+**Activity sheet title & instructions** (clear student-facing intro, estimated time)
+
+**Warm-up** (1 short activation task)
+
+**Core activities** (3–5 numbered tasks: mix of recall, application, discussion, and problem-solving; include space cues like “Write your answer below”)
+
+**Challenge extension** (1 stretch task)
+
+**Reflection** (2–3 metacognitive prompts)
+
+**Answer guidance for tutor** (brief indicative answers or facilitation notes — clearly labelled for the lecturer)
+
+Be specific to the title and department. Ready to print or share. Deliver the complete sheet directly.`;
+	}
+
+	if (mode === "rubric") {
+		return `${sharedHeader}
+Create an **assessment rubric** for a major piece of coursework on this topic. Return structured Markdown using bold-only section titles on their own lines — never hash (#) headings or horizontal rules.
+
+Include these sections in order:
+
+**Assessment brief** (task type, weighting suggestion, submission format)
+
+**Criteria** (4–6 criteria with clear names)
+
+**Performance levels** (use Excellent / Good / Satisfactory / Needs improvement — or First / 2:1 / 2:2 / Third if degree-marking language fits)
+
+**Descriptors** (for each criterion × level: 1–2 sentence observable descriptors)
+
+**Marking notes** (how to apply the rubric fairly; common pitfalls)
+
+Be specific to the title and department. Use UK/university terminology. Deliver the complete rubric directly.`;
+	}
+
+	return `${sharedHeader}
 Plan a ${sessions}-session semester module outline appropriate for this level. Return structured Markdown using bold-only section titles on their own lines — never hash (#) headings or horizontal rules.
 
 Include these sections in order:
@@ -82,19 +173,40 @@ Include these sections in order:
 Be specific to the course title and department. Use UK/university terminology. Do not ask clarifying questions — deliver the complete outline directly.`;
 }
 
+function maxTokensForMode(mode: LessonOutputMode, sessions: number): number {
+	if (mode === "outline") return Math.min(8000, 2000 + sessions * 350);
+	if (mode === "rubric") return 4500;
+	if (mode === "activities") return 4000;
+	return 3500;
+}
+
 export async function generateCourseOutline(
 	input: GenerateCourseOutlineInput,
 	options?: { signal?: AbortSignal },
 ): Promise<{ outline: string }> {
-	const sessions = SESSIONS_BY_LEVEL[input.level] ?? 12;
-	const maxTokens = Math.min(8000, 2000 + sessions * 350);
+	const mode = input.mode ?? "outline";
+	const sessions =
+		input.sessionCount && input.sessionCount > 0
+			? Math.min(24, Math.max(4, Math.round(input.sessionCount)))
+			: (SESSIONS_BY_LEVEL[input.level] ?? 12);
+	const maxTokens = maxTokensForMode(mode, sessions);
+
+	const systemByMode: Record<LessonOutputMode, string> = {
+		outline:
+			"You write detailed university course outlines in Markdown for lecturers. Use bold-only section titles — never hash headings. Outlines must be level-appropriate, sequenced, and ready to teach from.",
+		session:
+			"You write precise, timed university session plans in Markdown for lecturers. Use bold-only section titles — never hash headings. Plans must be classroom-ready.",
+		activities:
+			"You write printable higher-education activity sheets in Markdown. Use bold-only section titles — never hash headings. Tasks must be clear for students and useful for tutors.",
+		rubric:
+			"You write fair, criterion-referenced assessment rubrics in Markdown for university coursework. Use bold-only section titles — never hash headings.",
+	};
 
 	const { text: rawOutline } = await completeOpenRouterChat(
 		[
 			{
 				role: "system",
-				content:
-					"You write detailed university course outlines in Markdown for lecturers. Use bold-only section titles — never hash headings. Outlines must be level-appropriate, sequenced, and ready to teach from.",
+				content: systemByMode[mode],
 			},
 			{
 				role: "user",

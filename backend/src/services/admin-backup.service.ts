@@ -5,6 +5,14 @@ import type { Model } from "mongoose";
 
 import { MessageModel } from "../db/models/Message.js";
 import { OutputArtifactModel } from "../db/models/OutputArtifact.js";
+import { AiSystemInventoryModel } from "../db/models/AiSystemInventory.js";
+import { ApprovalRequestModel } from "../db/models/ApprovalRequest.js";
+import { AuditLogModel } from "../db/models/AuditLog.js";
+import { ComplianceControlModel } from "../db/models/ComplianceControl.js";
+import { GovernanceIncidentModel } from "../db/models/GovernanceIncident.js";
+import { GovernancePolicyModel } from "../db/models/GovernancePolicy.js";
+import { GovernanceReportModel } from "../db/models/GovernanceReport.js";
+import { GovernanceRiskModel } from "../db/models/GovernanceRisk.js";
 import { ResearchIdeaSessionModel } from "../db/models/ResearchIdeaSession.js";
 import { SavedCoursePlanModel } from "../db/models/SavedCoursePlan.js";
 import { SavedResearchModel } from "../db/models/SavedResearch.js";
@@ -32,7 +40,8 @@ export type BackupFileInfo = {
 type BackupModelEntry = {
 	key: string;
 	label: string;
-	model: Model<unknown>;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	model: Model<any>;
 };
 
 const BACKUP_MODELS: BackupModelEntry[] = [
@@ -45,6 +54,14 @@ const BACKUP_MODELS: BackupModelEntry[] = [
 	{ key: "research_idea_sessions", label: "Research idea sessions", model: ResearchIdeaSessionModel },
 	{ key: "saved_course_plans", label: "Saved course plans", model: SavedCoursePlanModel },
 	{ key: "output_artifacts", label: "Output artifacts", model: OutputArtifactModel },
+	{ key: "governance_policies", label: "Governance policies", model: GovernancePolicyModel },
+	{ key: "audit_logs", label: "Audit logs", model: AuditLogModel },
+	{ key: "approval_requests", label: "Approval requests", model: ApprovalRequestModel },
+	{ key: "governance_reports", label: "Governance reports", model: GovernanceReportModel },
+	{ key: "governance_risks", label: "Governance risks", model: GovernanceRiskModel },
+	{ key: "compliance_controls", label: "Compliance controls", model: ComplianceControlModel },
+	{ key: "governance_incidents", label: "Governance incidents", model: GovernanceIncidentModel },
+	{ key: "ai_system_inventory", label: "AI system inventory", model: AiSystemInventoryModel },
 ];
 
 const BACKUP_FILE_PREFIX = "aula-backup-";
@@ -152,7 +169,7 @@ export async function createDatabaseBackup(): Promise<BackupFileInfo> {
 	const payload = {
 		version: 1,
 		createdAt: new Date().toISOString(),
-		app: "TrustLed Aula",
+		app: "Governed AI for Higher Institutions (GAHI)",
 		counts,
 		tables,
 	};
