@@ -11,9 +11,14 @@ export function userInitials(name: string): string {
 export function roleDisplay(role: AuthUser["role"]): string {
 	switch (role) {
 		case "admin":
-			return "Administrator";
+			return "Super Administrator";
+		case "governance_admin":
+			return "Governance Administrator";
+		case "faculty_admin":
+			return "Faculty Administrator";
 		case "viewer":
-			return "Viewer";
+		case "auditor":
+			return "Auditor";
 		case "researcher":
 			return "Researcher";
 		case "student":

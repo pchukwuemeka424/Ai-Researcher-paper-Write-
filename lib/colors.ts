@@ -57,6 +57,11 @@ export const colors = {
 		compliance: { bg: "#1d4ed8", fg: "#ffffff" },
 		incident: { bg: "#b91c1c", fg: "#ffffff" },
 		inventory: { bg: "#0f766e", fg: "#ffffff" },
+		alert: { bg: "#dc2626", fg: "#ffffff" },
+		contribution: { bg: "#7c3aed", fg: "#ffffff" },
+		provenance: { bg: "#0d9488", fg: "#ffffff" },
+		privacy: { bg: "#1d4ed8", fg: "#ffffff" },
+		retention: { bg: "#475569", fg: "#ffffff" },
 		default: { bg: "#64748b", fg: "#ffffff" },
 	},
 	feature: {

@@ -122,13 +122,24 @@ import {
 	createUser as adminCreateUser,
 	deleteUser as adminDeleteUser,
 	getDashboardStats as adminGetDashboardStats,
+	listConsoleAdmins as adminListConsoleAdmins,
 	listRecentSessions as adminListRecentSessions,
 	listRecentSessionTopics as adminListRecentSessionTopics,
 	listUsers as adminListUsers,
 	resetUserPassword,
 	updateUser as adminUpdateUser,
 } from "./services/admin-users.service.js";
-import { AdminRequiredError, requireAdmin } from "./lib/require-admin.js";
+import {
+	listUniversities as adminListUniversities,
+	onboardUniversity,
+	updateUniversity,
+} from "./services/admin-universities.service.js";
+import {
+	AdminRequiredError,
+	requireAdmin,
+	requireAdminScope,
+	requireSuperAdmin,
+} from "./lib/require-admin.js";
 import {
 	createDatabaseBackup,
 	listBackupFiles,
@@ -183,6 +194,42 @@ import {
 	updateIncident,
 } from "./services/admin-incidents.service.js";
 import {
+	createAlert,
+	getAlertStats,
+	listAlerts,
+	updateAlert,
+} from "./services/admin-alerts.service.js";
+import { getPlatformOverview } from "./services/admin-overview.service.js";
+import {
+	createContributionStatement,
+	getContributionStats,
+	listContributionStatements,
+	verifyContributionStatement,
+} from "./services/admin-contributions.service.js";
+import {
+	createProvenanceRecord,
+	getProvenanceStats,
+	listProvenanceRecords,
+	reviewProvenanceRecord,
+} from "./services/admin-provenance.service.js";
+import {
+	createPrivacySetting,
+	deletePrivacySetting,
+	getPrivacyStats,
+	listPrivacySettings,
+	updatePrivacySetting,
+} from "./services/admin-privacy.service.js";
+import {
+	createDeletionRequest,
+	createRetentionPolicy,
+	deleteRetentionPolicy,
+	getRetentionStats,
+	listDeletionRequests,
+	listRetentionPolicies,
+	updateDeletionRequest,
+	updateRetentionPolicy,
+} from "./services/admin-retention.service.js";
+import {
 	createAiSystem,
 	deleteAiSystem,
 	ensureDefaultAiSystems,
@@ -193,6 +240,7 @@ import {
 import { cleanupSeededGovernanceMocks } from "./services/admin-governance-cleanup.service.js";
 import { ensureDefaultAdmin } from "./services/bootstrap-admin.service.js";
 import { handleGenerate as handleResearchNoteGenerate } from "./services/research-note-ai/handler.js";
+import { UserModel } from "./db/models/User.js";
 
 async function resolveUserId(authorization?: string): Promise<string | null> {
 	const token = extractBearerToken(authorization);
@@ -287,6 +335,7 @@ export async function startServer(port: number): Promise<void> {
 			password?: string;
 			department?: string;
 			institution?: string;
+			catalogueId?: string;
 		};
 		if (!body.name?.trim() || !body.email?.trim() || !body.password || !body.department?.trim()) {
 			return reply.code(400).send({ error: "Name, email, password, and department are required." });
@@ -298,6 +347,7 @@ export async function startServer(port: number): Promise<void> {
 				password: body.password,
 				department: body.department,
 				institution: body.institution,
+				catalogueId: body.catalogueId,
 			});
 			return result;
 		} catch (error) {
@@ -313,6 +363,7 @@ export async function startServer(port: number): Promise<void> {
 			password?: string;
 			department?: string;
 			institution?: string;
+			catalogueId?: string;
 		};
 		if (!body.name?.trim() || !body.email?.trim() || !body.password || !body.department?.trim()) {
 			return reply.code(400).send({ error: "Name, email, password, and program are required." });
@@ -324,6 +375,7 @@ export async function startServer(port: number): Promise<void> {
 				password: body.password,
 				department: body.department,
 				institution: body.institution,
+				catalogueId: body.catalogueId,
 			});
 			return result;
 		} catch (error) {
@@ -1572,8 +1624,8 @@ export async function startServer(port: number): Promise<void> {
 
 	app.get("/api/admin/stats", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
-			return { stats: await adminGetDashboardStats() };
+			const scope = await requireAdminScope(request.headers.authorization);
+			return { stats: await adminGetDashboardStats(scope) };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
 				return reply.code(error.statusCode).send({ error: error.message });
@@ -1585,9 +1637,9 @@ export async function startServer(port: number): Promise<void> {
 
 	app.get<{ Querystring: { limit?: string } }>("/api/admin/sessions/recent-topics", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const limit = Number.parseInt(request.query.limit ?? "8", 10);
-			const sessions = await adminListRecentSessionTopics(Number.isFinite(limit) ? limit : 8);
+			const sessions = await adminListRecentSessionTopics(Number.isFinite(limit) ? limit : 8, scope);
 			return { sessions };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
@@ -1600,9 +1652,9 @@ export async function startServer(port: number): Promise<void> {
 
 	app.get<{ Querystring: { limit?: string } }>("/api/admin/sessions", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const limit = Number.parseInt(request.query.limit ?? "50", 10);
-			const sessions = await adminListRecentSessions(Number.isFinite(limit) ? limit : 50);
+			const sessions = await adminListRecentSessions(Number.isFinite(limit) ? limit : 50, scope);
 			return { sessions };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
@@ -1660,8 +1712,8 @@ export async function startServer(port: number): Promise<void> {
 
 	app.get("/api/admin/users", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
-			return { users: await adminListUsers() };
+			const scope = await requireAdminScope(request.headers.authorization);
+			return { users: await adminListUsers(scope) };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
 				return reply.code(error.statusCode).send({ error: error.message });
@@ -1671,9 +1723,96 @@ export async function startServer(port: number): Promise<void> {
 		}
 	});
 
+	app.get("/api/admin/admins", async (request, reply) => {
+		try {
+			await requireSuperAdmin(request.headers.authorization);
+			return { users: await adminListConsoleAdmins() };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get("/api/admin/universities", async (request, reply) => {
+		try {
+			await requireSuperAdmin(request.headers.authorization);
+			return { universities: await adminListUniversities() };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/universities", async (request, reply) => {
+		try {
+			const adminId = await requireSuperAdmin(request.headers.authorization);
+			const body = request.body as {
+				catalogueId?: string;
+				name?: string;
+				status?: "active" | "inactive";
+			};
+			if (!body.catalogueId?.trim() || !body.name?.trim()) {
+				return reply.code(400).send({ error: "catalogueId and name are required." });
+			}
+			const university = await onboardUniversity({
+				catalogueId: body.catalogueId,
+				name: body.name,
+				status: body.status ?? "active",
+				onboardedBy: adminId,
+			});
+			await recordAuditEvent({
+				action: "admin.university_onboarded",
+				category: "admin",
+				actorId: adminId,
+				summary: `Onboarded university ${university.name}`,
+				targetType: "university",
+				targetId: university.id,
+				severity: "medium",
+			});
+			return { university };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/universities/:id", async (request, reply) => {
+		try {
+			const adminId = await requireSuperAdmin(request.headers.authorization);
+			const body = request.body as Partial<{ name: string; status: "active" | "inactive" }>;
+			const university = await updateUniversity(request.params.id, body, adminId);
+			if (!university) return reply.code(404).send({ error: "University not found." });
+			await recordAuditEvent({
+				action: "admin.university_updated",
+				category: "admin",
+				actorId: adminId,
+				summary: `Updated university ${university.name} (${university.status})`,
+				targetType: "university",
+				targetId: university.id,
+				severity: "low",
+			});
+			return { university };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
 	app.post("/api/admin/users", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const body = request.body as {
 				name?: string;
 				email?: string;
@@ -1681,20 +1820,31 @@ export async function startServer(port: number): Promise<void> {
 				status?: string;
 				department?: string;
 				institution?: string;
+				universityId?: string;
+				faculty?: string;
+				programme?: string;
+				cohort?: string;
 				password?: string;
 			};
 			if (!body.name?.trim() || !body.email?.trim()) {
 				return reply.code(400).send({ error: "Name and email are required." });
 			}
-			const user = await adminCreateUser({
-				name: body.name,
-				email: body.email,
-				role: body.role,
-				status: body.status,
-				department: body.department,
-				institution: body.institution,
-				password: body.password,
-			});
+			const user = await adminCreateUser(
+				{
+					name: body.name,
+					email: body.email,
+					role: body.role,
+					status: body.status,
+					department: body.department,
+					institution: body.institution,
+					universityId: body.universityId,
+					faculty: body.faculty,
+					programme: body.programme,
+					cohort: body.cohort,
+					password: body.password,
+				},
+				scope,
+			);
 			return { user };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
@@ -1707,7 +1857,7 @@ export async function startServer(port: number): Promise<void> {
 
 	app.patch<{ Params: { id: string } }>("/api/admin/users/:id", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const body = request.body as Partial<{
 				name: string;
 				email: string;
@@ -1715,8 +1865,12 @@ export async function startServer(port: number): Promise<void> {
 				status: string;
 				department: string;
 				institution: string;
+				universityId: string | null;
+				faculty: string;
+				programme: string;
+				cohort: string;
 			}>;
-			const user = await adminUpdateUser(request.params.id, body);
+			const user = await adminUpdateUser(request.params.id, body, scope);
 			if (!user) return reply.code(404).send({ error: "User not found." });
 			return { user };
 		} catch (error) {
@@ -1730,13 +1884,13 @@ export async function startServer(port: number): Promise<void> {
 
 	app.delete<{ Params: { id: string } }>("/api/admin/users/:id", async (request, reply) => {
 		try {
-			const adminId = await requireAdmin(request.headers.authorization);
-			const deleted = await adminDeleteUser(request.params.id);
+			const scope = await requireAdminScope(request.headers.authorization);
+			const deleted = await adminDeleteUser(request.params.id, scope);
 			if (!deleted) return reply.code(404).send({ error: "User not found." });
 			await recordAuditEvent({
 				action: "admin.user_deleted",
 				category: "admin",
-				actorId: adminId,
+				actorId: scope.actorId,
 				summary: `Deleted user ${request.params.id}`,
 				targetType: "user",
 				targetId: request.params.id,
@@ -1754,12 +1908,12 @@ export async function startServer(port: number): Promise<void> {
 
 	app.post<{ Params: { id: string } }>("/api/admin/users/:id/reset-password", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const body = request.body as { password?: string };
 			if (!body.password?.trim()) {
 				return reply.code(400).send({ error: "Password is required." });
 			}
-			const user = await resetUserPassword(request.params.id, body.password);
+			const user = await resetUserPassword(request.params.id, body.password, scope);
 			if (!user) return reply.code(404).send({ error: "User not found." });
 			return { user };
 		} catch (error) {
@@ -1773,12 +1927,12 @@ export async function startServer(port: number): Promise<void> {
 
 	app.post("/api/admin/users/bulk-status", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
-			const body = request.body as { ids?: string[]; status?: "active" | "inactive" };
+			const scope = await requireAdminScope(request.headers.authorization);
+			const body = request.body as { ids?: string[]; status?: "active" | "inactive" | "suspended" };
 			if (!body.ids?.length || !body.status) {
 				return reply.code(400).send({ error: "ids and status are required." });
 			}
-			return await bulkUpdateUserStatus(body.ids, body.status);
+			return await bulkUpdateUserStatus(body.ids, body.status, scope);
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
 				return reply.code(error.statusCode).send({ error: error.message });
@@ -1790,12 +1944,12 @@ export async function startServer(port: number): Promise<void> {
 
 	app.post("/api/admin/users/bulk-delete", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const body = request.body as { ids?: string[] };
 			if (!body.ids?.length) {
 				return reply.code(400).send({ error: "ids are required." });
 			}
-			return await bulkDeleteUsers(body.ids);
+			return await bulkDeleteUsers(body.ids, scope);
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
 				return reply.code(error.statusCode).send({ error: error.message });
@@ -1836,8 +1990,11 @@ export async function startServer(port: number): Promise<void> {
 
 	app.get("/api/admin/tokens", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
-			const [users, stats] = await Promise.all([listUsersTokenQuotas(), getTokenAdminStats()]);
+			const scope = await requireAdminScope(request.headers.authorization);
+			const [users, stats] = await Promise.all([
+				listUsersTokenQuotas(scope),
+				getTokenAdminStats(scope),
+			]);
 			return { users, stats };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
@@ -1850,12 +2007,12 @@ export async function startServer(port: number): Promise<void> {
 
 	app.post("/api/admin/tokens/bulk-reset", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const body = request.body as { ids?: string[] };
 			if (!body.ids?.length) {
 				return reply.code(400).send({ error: "ids are required." });
 			}
-			return await bulkResetUserTokens(body.ids);
+			return await bulkResetUserTokens(body.ids, scope);
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
 				return reply.code(error.statusCode).send({ error: error.message });
@@ -1867,13 +2024,13 @@ export async function startServer(port: number): Promise<void> {
 
 	app.patch<{ Params: { id: string } }>("/api/admin/tokens/:id", async (request, reply) => {
 		try {
-			await requireAdmin(request.headers.authorization);
+			const scope = await requireAdminScope(request.headers.authorization);
 			const body = request.body as { reset?: boolean; tokensUsed?: number };
 			let record;
 			if (body.reset) {
-				record = await resetUserTokens(request.params.id);
+				record = await resetUserTokens(request.params.id, scope);
 			} else if (body.tokensUsed !== undefined) {
-				record = await setUserTokensUsed(request.params.id, body.tokensUsed);
+				record = await setUserTokensUsed(request.params.id, body.tokensUsed, scope);
 			} else {
 				return reply.code(400).send({ error: "Provide reset: true or tokensUsed." });
 			}
@@ -1976,6 +2133,19 @@ export async function startServer(port: number): Promise<void> {
 		try {
 			await requireAdmin(request.headers.authorization);
 			return { analytics: await getUsageAnalytics() };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.get("/api/admin/overview", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			return { overview: await getPlatformOverview() };
 		} catch (error) {
 			if (error instanceof AdminRequiredError) {
 				return reply.code(error.statusCode).send({ error: error.message });
@@ -2324,11 +2494,23 @@ export async function startServer(port: number): Promise<void> {
 				audience?: "management" | "senate" | "both";
 				periodStart?: string;
 				periodEnd?: string;
+				reportType?: string;
+				format?: string;
+				faculty?: string;
+				department?: string;
+				programme?: string;
+				userRole?: string;
 			};
 			const report = await generateGovernanceReport({
 				audience: body.audience ?? "both",
 				periodStart: body.periodStart,
 				periodEnd: body.periodEnd,
+				reportType: body.reportType,
+				format: body.format,
+				faculty: body.faculty,
+				department: body.department,
+				programme: body.programme,
+				userRole: body.userRole,
 				actorId: adminId,
 			});
 			return { report };
@@ -2602,8 +2784,10 @@ export async function startServer(port: number): Promise<void> {
 				department?: string;
 				reportedByName?: string;
 				reportedByEmail?: string;
+				userInvolvedName?: string;
 				assigneeName?: string;
 				impactSummary?: string;
+				evidence?: string | string[];
 				linkedAuditId?: string;
 			};
 			if (!body.title?.trim() || !body.kind) {
@@ -2626,8 +2810,10 @@ export async function startServer(port: number): Promise<void> {
 					department: body.department,
 					reportedByName: body.reportedByName,
 					reportedByEmail: body.reportedByEmail,
+					userInvolvedName: body.userInvolvedName,
 					assigneeName: body.assigneeName,
 					impactSummary: body.impactSummary,
+					evidence: body.evidence,
 					linkedAuditId: body.linkedAuditId,
 				},
 				adminId,
@@ -2657,6 +2843,419 @@ export async function startServer(port: number): Promise<void> {
 			return reply.code(400).send({ error: message });
 		}
 	});
+
+	/* ── Governance alerts ───────────────────────────────────────────── */
+
+	app.get<{ Querystring: { status?: string; severity?: string; kind?: string } }>(
+		"/api/admin/alerts",
+		async (request, reply) => {
+			try {
+				await requireAdmin(request.headers.authorization);
+				const [alerts, stats] = await Promise.all([
+					listAlerts({
+						status: request.query.status,
+						severity: request.query.severity,
+						kind: request.query.kind,
+					}),
+					getAlertStats(),
+				]);
+				return { alerts, stats };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(500).send({ error: message });
+			}
+		},
+	);
+
+	app.post("/api/admin/alerts", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as {
+				title?: string;
+				summary?: string;
+				kind?: string;
+				severity?: string;
+				faculty?: string;
+				department?: string;
+				actorEmail?: string;
+				actorName?: string;
+				assigneeName?: string;
+				linkedAuditId?: string;
+			};
+			if (!body.title?.trim() || !body.summary?.trim() || !body.kind) {
+				return reply.code(400).send({ error: "title, summary, and kind are required." });
+			}
+			const alert = await createAlert(
+				{
+					title: body.title,
+					summary: body.summary,
+					kind: body.kind as never,
+					severity: body.severity as "low" | "medium" | "high" | "critical" | undefined,
+					faculty: body.faculty,
+					department: body.department,
+					actorEmail: body.actorEmail,
+					actorName: body.actorName,
+					assigneeName: body.assigneeName,
+					linkedAuditId: body.linkedAuditId,
+				},
+				adminId,
+			);
+			return { alert };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/alerts/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			const alert = await updateAlert(request.params.id, body as never, adminId);
+			if (!alert) return reply.code(404).send({ error: "Alert not found." });
+			return { alert };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	/* ── AI contribution statements ──────────────────────────────────── */
+
+	app.get<{
+		Querystring: { verified?: string; disclosureComplete?: string; outputType?: string };
+	}>("/api/admin/contributions", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const [statements, stats] = await Promise.all([
+				listContributionStatements({
+					verified:
+						request.query.verified === "1"
+							? true
+							: request.query.verified === "0"
+								? false
+								: undefined,
+					disclosureComplete:
+						request.query.disclosureComplete === "1"
+							? true
+							: request.query.disclosureComplete === "0"
+								? false
+								: undefined,
+					outputType: request.query.outputType,
+				}),
+				getContributionStats(),
+			]);
+			return { statements, stats };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/contributions", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			if (!body.outputRef || !body.outputTitle) {
+				return reply.code(400).send({ error: "outputRef and outputTitle are required." });
+			}
+			const statement = await createContributionStatement(body as never, adminId);
+			return { statement };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>(
+		"/api/admin/contributions/:id",
+		async (request, reply) => {
+			try {
+				const adminId = await requireAdmin(request.headers.authorization);
+				const admin = await UserModel.findById(adminId).select("name").lean();
+				const body = request.body as Record<string, unknown>;
+				const statement = await verifyContributionStatement(
+					request.params.id,
+					body as never,
+					adminId,
+					admin?.name,
+				);
+				if (!statement) return reply.code(404).send({ error: "Statement not found." });
+				return { statement };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(400).send({ error: message });
+			}
+		},
+	);
+
+	/* ── Research provenance ─────────────────────────────────────────── */
+
+	app.get<{ Querystring: { status?: string; outputType?: string } }>(
+		"/api/admin/provenance",
+		async (request, reply) => {
+			try {
+				await requireAdmin(request.headers.authorization);
+				const [records, stats] = await Promise.all([
+					listProvenanceRecords({
+						status: request.query.status,
+						outputType: request.query.outputType,
+					}),
+					getProvenanceStats(),
+				]);
+				return { records, stats };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(500).send({ error: message });
+			}
+		},
+	);
+
+	app.post("/api/admin/provenance", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			if (!body.outputRef || !body.outputTitle) {
+				return reply.code(400).send({ error: "outputRef and outputTitle are required." });
+			}
+			const record = await createProvenanceRecord(body as never, adminId);
+			return { record };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/provenance/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const admin = await UserModel.findById(adminId).select("name").lean();
+			const body = request.body as Record<string, unknown>;
+			const record = await reviewProvenanceRecord(
+				request.params.id,
+				body as never,
+				adminId,
+				admin?.name,
+			);
+			if (!record) return reply.code(404).send({ error: "Provenance record not found." });
+			return { record };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	/* ── Research privacy controls ───────────────────────────────────── */
+
+	app.get("/api/admin/privacy", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const [settings, stats] = await Promise.all([listPrivacySettings(), getPrivacyStats()]);
+			return { settings, stats };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/privacy", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			if (!body.name || !body.dataClass) {
+				return reply.code(400).send({ error: "name and dataClass are required." });
+			}
+			const setting = await createPrivacySetting(body as never, adminId);
+			return { setting };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>("/api/admin/privacy/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			const setting = await updatePrivacySetting(request.params.id, body as never, adminId);
+			if (!setting) return reply.code(404).send({ error: "Privacy setting not found." });
+			return { setting };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.delete<{ Params: { id: string } }>("/api/admin/privacy/:id", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const deleted = await deletePrivacySetting(request.params.id, adminId);
+			if (!deleted) return reply.code(404).send({ error: "Privacy setting not found." });
+			return { ok: true };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	/* ── Retention & deletion ────────────────────────────────────────── */
+
+	app.get("/api/admin/retention", async (request, reply) => {
+		try {
+			await requireAdmin(request.headers.authorization);
+			const [policies, deletionRequests, stats] = await Promise.all([
+				listRetentionPolicies(),
+				listDeletionRequests(),
+				getRetentionStats(),
+			]);
+			return { policies, deletionRequests, stats };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(500).send({ error: message });
+		}
+	});
+
+	app.post("/api/admin/retention/policies", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			if (!body.name || !body.dataCategory || body.retainDays == null) {
+				return reply
+					.code(400)
+					.send({ error: "name, dataCategory, and retainDays are required." });
+			}
+			const policy = await createRetentionPolicy(body as never, adminId);
+			return { policy };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>(
+		"/api/admin/retention/policies/:id",
+		async (request, reply) => {
+			try {
+				const adminId = await requireAdmin(request.headers.authorization);
+				const body = request.body as Record<string, unknown>;
+				const policy = await updateRetentionPolicy(request.params.id, body as never, adminId);
+				if (!policy) return reply.code(404).send({ error: "Retention policy not found." });
+				return { policy };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(400).send({ error: message });
+			}
+		},
+	);
+
+	app.delete<{ Params: { id: string } }>(
+		"/api/admin/retention/policies/:id",
+		async (request, reply) => {
+			try {
+				const adminId = await requireAdmin(request.headers.authorization);
+				const deleted = await deleteRetentionPolicy(request.params.id, adminId);
+				if (!deleted) return reply.code(404).send({ error: "Retention policy not found." });
+				return { ok: true };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(500).send({ error: message });
+			}
+		},
+	);
+
+	app.post("/api/admin/retention/deletion-requests", async (request, reply) => {
+		try {
+			const adminId = await requireAdmin(request.headers.authorization);
+			const body = request.body as Record<string, unknown>;
+			if (!body.subjectName || !body.subjectEmail) {
+				return reply.code(400).send({ error: "subjectName and subjectEmail are required." });
+			}
+			const deletionRequest = await createDeletionRequest(body as never, adminId);
+			return { deletionRequest };
+		} catch (error) {
+			if (error instanceof AdminRequiredError) {
+				return reply.code(error.statusCode).send({ error: error.message });
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			return reply.code(400).send({ error: message });
+		}
+	});
+
+	app.patch<{ Params: { id: string } }>(
+		"/api/admin/retention/deletion-requests/:id",
+		async (request, reply) => {
+			try {
+				const adminId = await requireAdmin(request.headers.authorization);
+				const body = request.body as Record<string, unknown>;
+				const deletionRequest = await updateDeletionRequest(
+					request.params.id,
+					body as never,
+					adminId,
+				);
+				if (!deletionRequest) {
+					return reply.code(404).send({ error: "Deletion request not found." });
+				}
+				return { deletionRequest };
+			} catch (error) {
+				if (error instanceof AdminRequiredError) {
+					return reply.code(error.statusCode).send({ error: error.message });
+				}
+				const message = error instanceof Error ? error.message : String(error);
+				return reply.code(400).send({ error: message });
+			}
+		},
+	);
 
 	app.get<{ Querystring: { status?: string; riskTier?: string } }>(
 		"/api/admin/inventory",

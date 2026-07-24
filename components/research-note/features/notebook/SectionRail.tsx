@@ -32,7 +32,15 @@ export function SectionRail({
   onRemovePage: (id: string) => void
 }) {
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-canvas)]">
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="border-b border-[var(--color-border)] px-3 py-2.5">
+        <p className="text-[0.65rem] font-bold uppercase tracking-[0.08em] text-[var(--color-muted)]">
+          Pages
+        </p>
+        <p className="mt-0.5 text-[0.7rem] leading-snug text-[var(--color-muted)]">
+          Group notes by theme or source. Double-click a name to rename.
+        </p>
+      </div>
       <div className="flex-1 overflow-y-auto p-2">
         {sections.length === 0 && (
           <p className="px-2 py-4 text-xs text-[var(--color-muted)]">

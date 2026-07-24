@@ -11,7 +11,62 @@ export type IncidentKind =
 	| "other";
 
 export type IncidentSeverity = "low" | "medium" | "high" | "critical";
-export type IncidentStatus = "open" | "investigating" | "contained" | "resolved" | "closed";
+
+export type IncidentStatus =
+	| "new"
+	| "assigned"
+	| "under_investigation"
+	| "waiting_for_response"
+	| "resolved"
+	| "closed";
+
+/** Legacy statuses still present in older documents. */
+type LegacyIncidentStatus = "open" | "investigating" | "contained";
+
+const ACTIVE_STATUSES = [
+	"new",
+	"assigned",
+	"under_investigation",
+	"waiting_for_response",
+	"open",
+	"investigating",
+	"contained",
+] as const;
+
+export function normalizeIncidentStatus(status: string): IncidentStatus {
+	switch (status) {
+		case "open":
+			return "new";
+		case "investigating":
+			return "under_investigation";
+		case "contained":
+			return "waiting_for_response";
+		case "new":
+		case "assigned":
+		case "under_investigation":
+		case "waiting_for_response":
+		case "resolved":
+		case "closed":
+			return status;
+		default:
+			return "new";
+	}
+}
+
+function statusFilterValues(status?: string): string[] | null {
+	if (!status) return null;
+	const normalized = normalizeIncidentStatus(status);
+	switch (normalized) {
+		case "new":
+			return ["new", "open"];
+		case "under_investigation":
+			return ["under_investigation", "investigating"];
+		case "waiting_for_response":
+			return ["waiting_for_response", "contained"];
+		default:
+			return [normalized];
+	}
+}
 
 export type GovernanceIncidentRecord = {
 	id: string;
@@ -24,13 +79,16 @@ export type GovernanceIncidentRecord = {
 	department: string | null;
 	reportedByName: string;
 	reportedByEmail: string;
+	userInvolvedName: string;
 	assigneeName: string;
 	impactSummary: string;
+	evidence: string[];
 	containmentActions: string;
 	rootCause: string;
 	lessonsLearned: string;
 	linkedAuditId: string | null;
 	linkedSystemId: string | null;
+	timeline: Array<{ at: string; actorName: string; action: string; note: string }>;
 	detectedAt: string;
 	resolvedAt: string | null;
 	createdAt: string;
@@ -48,36 +106,54 @@ function toRecord(doc: {
 	department?: string | null;
 	reportedByName?: string | null;
 	reportedByEmail?: string | null;
+	userInvolvedName?: string | null;
 	assigneeName?: string | null;
 	impactSummary?: string | null;
+	evidence?: string[] | string | null;
 	containmentActions?: string | null;
 	rootCause?: string | null;
 	lessonsLearned?: string | null;
 	linkedAuditId?: string | null;
 	linkedSystemId?: string | null;
+	timeline?: Array<{ at?: Date; actorName?: string; action?: string; note?: string }>;
 	detectedAt?: Date | null;
 	resolvedAt?: Date | null;
 	createdAt: Date;
 	updatedAt: Date;
 }): GovernanceIncidentRecord {
+	const evidenceRaw = doc.evidence;
+	const evidence = Array.isArray(evidenceRaw)
+		? evidenceRaw.filter(Boolean)
+		: typeof evidenceRaw === "string" && evidenceRaw.trim()
+			? [evidenceRaw.trim()]
+			: [];
+
 	return {
 		id: doc._id.toString(),
 		title: doc.title,
 		description: doc.description ?? "",
 		kind: doc.kind as IncidentKind,
 		severity: doc.severity as IncidentSeverity,
-		status: doc.status as IncidentStatus,
+		status: normalizeIncidentStatus(doc.status),
 		faculty: doc.faculty ?? null,
 		department: doc.department ?? null,
 		reportedByName: doc.reportedByName ?? "",
 		reportedByEmail: doc.reportedByEmail ?? "",
+		userInvolvedName: doc.userInvolvedName ?? "",
 		assigneeName: doc.assigneeName ?? "",
 		impactSummary: doc.impactSummary ?? "",
+		evidence,
 		containmentActions: doc.containmentActions ?? "",
 		rootCause: doc.rootCause ?? "",
 		lessonsLearned: doc.lessonsLearned ?? "",
 		linkedAuditId: doc.linkedAuditId ?? null,
 		linkedSystemId: doc.linkedSystemId ?? null,
+		timeline: (doc.timeline ?? []).map((entry) => ({
+			at: (entry.at ?? doc.createdAt).toISOString(),
+			actorName: entry.actorName ?? "",
+			action: entry.action ?? "",
+			note: entry.note ?? "",
+		})),
 		detectedAt: (doc.detectedAt ?? doc.createdAt).toISOString(),
 		resolvedAt: doc.resolvedAt?.toISOString() ?? null,
 		createdAt: doc.createdAt.toISOString(),
@@ -92,7 +168,8 @@ export async function listIncidents(options: {
 	limit?: number;
 } = {}) {
 	const filter: Record<string, unknown> = {};
-	if (options.status) filter.status = options.status;
+	const statuses = statusFilterValues(options.status);
+	if (statuses) filter.status = { $in: statuses };
 	if (options.severity) filter.severity = options.severity;
 	if (options.kind) filter.kind = options.kind;
 	const limit = Math.min(Math.max(options.limit ?? 100, 1), 300);
@@ -113,27 +190,45 @@ export async function createIncident(
 		department?: string;
 		reportedByName?: string;
 		reportedByEmail?: string;
+		userInvolvedName?: string;
 		assigneeName?: string;
 		impactSummary?: string;
+		evidence?: string | string[];
 		linkedAuditId?: string;
 		linkedSystemId?: string;
 	},
 	actorId?: string,
 ) {
+	const evidence = Array.isArray(input.evidence)
+		? input.evidence.map((e) => e.trim()).filter(Boolean)
+		: input.evidence?.trim()
+			? [input.evidence.trim()]
+			: [];
+
 	const doc = await GovernanceIncidentModel.create({
 		title: input.title.trim(),
 		description: input.description?.trim() ?? "",
 		kind: input.kind,
 		severity: input.severity ?? "medium",
-		status: "open",
+		status: "new",
 		faculty: input.faculty?.trim(),
 		department: input.department?.trim(),
 		reportedByName: input.reportedByName?.trim() ?? "",
 		reportedByEmail: input.reportedByEmail?.trim() ?? "",
+		userInvolvedName: input.userInvolvedName?.trim() ?? "",
 		assigneeName: input.assigneeName?.trim() ?? "",
 		impactSummary: input.impactSummary?.trim() ?? "",
+		evidence,
 		linkedAuditId: input.linkedAuditId,
 		linkedSystemId: input.linkedSystemId,
+		timeline: [
+			{
+				at: new Date(),
+				actorName: input.reportedByName?.trim() || "Administrator",
+				action: "opened",
+				note: input.impactSummary?.trim() || "Incident opened",
+			},
+		],
 		detectedAt: new Date(),
 		createdBy: actorId,
 		updatedBy: actorId,
@@ -165,67 +260,104 @@ export async function updateIncident(
 		description: string;
 		kind: IncidentKind;
 		severity: IncidentSeverity;
-		status: IncidentStatus;
+		status: IncidentStatus | LegacyIncidentStatus;
 		faculty: string;
 		department: string;
 		reportedByName: string;
 		reportedByEmail: string;
+		userInvolvedName: string;
 		assigneeName: string;
 		impactSummary: string;
+		evidence: string | string[];
 		containmentActions: string;
 		rootCause: string;
 		lessonsLearned: string;
 		linkedAuditId: string;
 		linkedSystemId: string;
+		timelineNote: string;
+		actorName: string;
 	}>,
 	actorId?: string,
 ) {
-	const closing =
-		input.status === "resolved" || input.status === "closed"
-			? { resolvedAt: new Date() }
-			: {};
+	const normalizedStatus =
+		input.status !== undefined ? normalizeIncidentStatus(input.status) : undefined;
 
-	const doc = await GovernanceIncidentModel.findByIdAndUpdate(
-		id,
-		{
-			...(input.title !== undefined ? { title: input.title.trim() } : {}),
-			...(input.description !== undefined ? { description: input.description.trim() } : {}),
-			...(input.kind !== undefined ? { kind: input.kind } : {}),
-			...(input.severity !== undefined ? { severity: input.severity } : {}),
-			...(input.status !== undefined ? { status: input.status } : {}),
-			...(input.faculty !== undefined ? { faculty: input.faculty.trim() } : {}),
-			...(input.department !== undefined ? { department: input.department.trim() } : {}),
-			...(input.reportedByName !== undefined ? { reportedByName: input.reportedByName.trim() } : {}),
-			...(input.reportedByEmail !== undefined
-				? { reportedByEmail: input.reportedByEmail.trim() }
-				: {}),
-			...(input.assigneeName !== undefined ? { assigneeName: input.assigneeName.trim() } : {}),
-			...(input.impactSummary !== undefined ? { impactSummary: input.impactSummary.trim() } : {}),
-			...(input.containmentActions !== undefined
-				? { containmentActions: input.containmentActions.trim() }
-				: {}),
-			...(input.rootCause !== undefined ? { rootCause: input.rootCause.trim() } : {}),
-			...(input.lessonsLearned !== undefined ? { lessonsLearned: input.lessonsLearned.trim() } : {}),
-			...(input.linkedAuditId !== undefined ? { linkedAuditId: input.linkedAuditId } : {}),
-			...(input.linkedSystemId !== undefined ? { linkedSystemId: input.linkedSystemId } : {}),
-			...closing,
-			...(actorId ? { updatedBy: actorId } : {}),
-		},
-		{ new: true },
-	).lean();
+	const evidence =
+		input.evidence !== undefined
+			? Array.isArray(input.evidence)
+				? input.evidence.map((e) => e.trim()).filter(Boolean)
+				: input.evidence.trim()
+					? [input.evidence.trim()]
+					: []
+			: undefined;
+
+	const setFields: Record<string, unknown> = {
+		...(input.title !== undefined ? { title: input.title.trim() } : {}),
+		...(input.description !== undefined ? { description: input.description.trim() } : {}),
+		...(input.kind !== undefined ? { kind: input.kind } : {}),
+		...(input.severity !== undefined ? { severity: input.severity } : {}),
+		...(normalizedStatus !== undefined ? { status: normalizedStatus } : {}),
+		...(input.faculty !== undefined ? { faculty: input.faculty.trim() } : {}),
+		...(input.department !== undefined ? { department: input.department.trim() } : {}),
+		...(input.reportedByName !== undefined ? { reportedByName: input.reportedByName.trim() } : {}),
+		...(input.reportedByEmail !== undefined
+			? { reportedByEmail: input.reportedByEmail.trim() }
+			: {}),
+		...(input.userInvolvedName !== undefined
+			? { userInvolvedName: input.userInvolvedName.trim() }
+			: {}),
+		...(input.assigneeName !== undefined ? { assigneeName: input.assigneeName.trim() } : {}),
+		...(input.impactSummary !== undefined ? { impactSummary: input.impactSummary.trim() } : {}),
+		...(evidence !== undefined ? { evidence } : {}),
+		...(input.containmentActions !== undefined
+			? { containmentActions: input.containmentActions.trim() }
+			: {}),
+		...(input.rootCause !== undefined ? { rootCause: input.rootCause.trim() } : {}),
+		...(input.lessonsLearned !== undefined ? { lessonsLearned: input.lessonsLearned.trim() } : {}),
+		...(input.linkedAuditId !== undefined ? { linkedAuditId: input.linkedAuditId } : {}),
+		...(input.linkedSystemId !== undefined ? { linkedSystemId: input.linkedSystemId } : {}),
+		...(normalizedStatus === "resolved" || normalizedStatus === "closed"
+			? { resolvedAt: new Date() }
+			: {}),
+		...(actorId ? { updatedBy: actorId } : {}),
+	};
+
+	const timelineEntry =
+		normalizedStatus || input.timelineNote || evidence
+			? {
+					at: new Date(),
+					actorName: input.actorName?.trim() || "Administrator",
+					action: normalizedStatus ?? (evidence ? "evidence" : "comment"),
+					note:
+						input.timelineNote?.trim() ||
+						(evidence ? `Evidence: ${evidence.join("; ")}` : "") ||
+						input.containmentActions?.trim() ||
+						input.rootCause?.trim() ||
+						(normalizedStatus ? `Status → ${normalizedStatus}` : ""),
+				}
+			: null;
+
+	const update: Record<string, unknown> = {};
+	if (Object.keys(setFields).length) update.$set = setFields;
+	if (timelineEntry) update.$push = { timeline: timelineEntry };
+
+	const doc = await GovernanceIncidentModel.findByIdAndUpdate(id, update, { new: true }).lean();
 
 	if (!doc) return null;
 
-	if (actorId && input.status) {
+	if (actorId && normalizedStatus) {
 		await recordAuditEvent({
-			action: `incident.${input.status}`,
+			action: `incident.${normalizedStatus}`,
 			category: "security",
 			actorId,
-			summary: `Incident “${doc.title}” → ${input.status}`,
+			summary: `Incident “${doc.title}” → ${normalizedStatus}`,
 			targetType: "governance_incident",
 			targetId: id,
 			severity: doc.severity === "critical" ? "critical" : "medium",
-			flagged: input.status === "open" || input.status === "investigating",
+			flagged:
+				normalizedStatus === "new" ||
+				normalizedStatus === "assigned" ||
+				normalizedStatus === "under_investigation",
 		});
 	}
 
@@ -233,26 +365,35 @@ export async function updateIncident(
 }
 
 export async function getIncidentStats() {
-	const [total, open, investigating, contained, critical, high] = await Promise.all([
+	const [total, neu, assigned, investigating, waiting, critical, high] = await Promise.all([
 		GovernanceIncidentModel.countDocuments(),
-		GovernanceIncidentModel.countDocuments({ status: "open" }),
-		GovernanceIncidentModel.countDocuments({ status: "investigating" }),
-		GovernanceIncidentModel.countDocuments({ status: "contained" }),
+		GovernanceIncidentModel.countDocuments({ status: { $in: ["new", "open"] } }),
+		GovernanceIncidentModel.countDocuments({ status: "assigned" }),
+		GovernanceIncidentModel.countDocuments({
+			status: { $in: ["under_investigation", "investigating"] },
+		}),
+		GovernanceIncidentModel.countDocuments({
+			status: { $in: ["waiting_for_response", "contained"] },
+		}),
 		GovernanceIncidentModel.countDocuments({
 			severity: "critical",
-			status: { $in: ["open", "investigating", "contained"] },
+			status: { $in: [...ACTIVE_STATUSES] },
 		}),
 		GovernanceIncidentModel.countDocuments({
 			severity: "high",
-			status: { $in: ["open", "investigating", "contained"] },
+			status: { $in: [...ACTIVE_STATUSES] },
 		}),
 	]);
 	return {
 		total,
-		open,
+		open: neu,
+		new: neu,
+		assigned,
 		investigating,
-		contained,
-		active: open + investigating + contained,
+		underInvestigation: investigating,
+		contained: waiting,
+		waitingForResponse: waiting,
+		active: neu + assigned + investigating + waiting,
 		critical,
 		high,
 	};

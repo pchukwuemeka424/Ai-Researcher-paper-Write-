@@ -97,6 +97,7 @@ export function RegisterScreen({ defaultRole = "lecturer" }: Props) {
 				password,
 				department,
 				institution,
+				catalogueId: institutionId,
 			};
 
 			const registered = isStudent ? await registerStudent(payload) : await register(payload);
@@ -144,9 +145,9 @@ export function RegisterScreen({ defaultRole = "lecturer" }: Props) {
 
 						<AuthField
 							id="register-email"
-							label="University email"
+							label="Email"
 							type="email"
-							placeholder={isStudent ? "alex.johnson@unilag.edu.ng" : "jane.smith@unilag.edu.ng"}
+							placeholder={isStudent ? "alex.johnson@gmail.com" : "jane.smith@gmail.com"}
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 							autoComplete="email"

@@ -11,7 +11,7 @@ export type MaterialSource =
   | 'drafts'
 
 export interface SectionAgent {
-  /** Stable id, e.g. `publication:Introduction` or `labReports`. */
+  /** Stable id, e.g. `publication:Introduction` or `progressReports`. */
   id: string
   outputType: OutputType
   section: string | null

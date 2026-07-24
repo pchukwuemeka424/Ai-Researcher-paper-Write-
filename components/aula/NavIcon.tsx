@@ -166,6 +166,41 @@ export function NavIcon({ id, size = 18 }: Props) {
 					<path d="M3 7l2-3h14l2 3M8 12h8" strokeLinecap="round" />
 				</svg>
 			);
+		case "alert":
+			return (
+				<svg {...props}>
+					<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" strokeLinejoin="round" />
+					<path d="M13.73 21a2 2 0 0 1-3.46 0" strokeLinecap="round" />
+				</svg>
+			);
+		case "contribution":
+			return (
+				<svg {...props}>
+					<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+					<path d="M14 2v6h6M9 15l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+				</svg>
+			);
+		case "provenance":
+			return (
+				<svg {...props}>
+					<circle cx="12" cy="12" r="3" />
+					<path d="M12 2v4M12 18v4M2 12h4M18 12h4" strokeLinecap="round" />
+					<path d="m4.9 4.9 2.8 2.8M16.3 16.3l2.8 2.8M19.1 4.9l-2.8 2.8M7.7 16.3l-2.8 2.8" strokeLinecap="round" />
+				</svg>
+			);
+		case "privacy":
+			return (
+				<svg {...props}>
+					<rect x="5" y="11" width="14" height="10" rx="2" />
+					<path d="M8 11V8a4 4 0 0 1 8 0v3" strokeLinecap="round" />
+				</svg>
+			);
+		case "retention":
+			return (
+				<svg {...props}>
+					<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" strokeLinejoin="round" />
+				</svg>
+			);
 		default:
 			return (
 				<svg {...props}>

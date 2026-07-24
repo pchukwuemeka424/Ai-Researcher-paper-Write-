@@ -49,6 +49,31 @@ export const AULA_QUICK_ACCESS: QuickAccessTool[] = [
 	},
 ];
 
+/** Post-login hub cards on /dashboard — three primary workspace entry points. */
+export const AULA_HUB_TOOLS: QuickAccessTool[] = [
+	{
+		id: "research",
+		label: "Research Assistant",
+		href: "/research",
+		description: "Develop research ideas with cited references in your house style.",
+		iconColor: "blue",
+	},
+	{
+		id: "research-note",
+		label: "Research Notebook",
+		href: "/research/note",
+		description: "Notes, data, lab log, and AI drafts in one notebook.",
+		iconColor: "teal",
+	},
+	{
+		id: "lesson-planner",
+		label: "Lesson Planner",
+		href: "/lesson-planner",
+		description: "Build course outlines, session plans, activity sheets, and rubrics.",
+		iconColor: "pink",
+	},
+];
+
 export type AulaTopbarNavItem = AulaNavItem & {
 	/** `exact` matches only the path; `prefix` also matches nested routes. */
 	match?: "exact" | "prefix";

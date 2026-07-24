@@ -1,5 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import {
+  AI_DRAFT_GUIDES,
+  AI_DRAFT_HINTS,
+  AI_DRAFT_NAV_GROUPS,
   AI_DRAFT_TABS,
   type AiDraftTabKey,
   type OutputTabKey,
@@ -7,7 +10,24 @@ import {
 import { useNotebook } from '@/components/research-note/state/useNotebook'
 import { getProject } from '@/components/research-note/storage/repositories'
 import { debounce } from '@/components/research-note/lib/debounce'
-import { ArrowLeftIcon, PlusIcon } from '@/components/research-note/components/icons'
+import {
+  ArrowLeftIcon,
+  CloseIcon,
+  CommentIcon,
+  DownloadIcon,
+  ExportIcon,
+  FlaskIcon,
+  ImageIcon,
+  ImportIcon,
+  InfoIcon,
+  LightbulbIcon,
+  ManuscriptIcon,
+  NotebookIcon,
+  PlusIcon,
+  ProgressIcon,
+  SaveIcon,
+  TableIcon,
+} from '@/components/research-note/components/icons'
 import type { Page, RichTextDoc } from '@/components/research-note/storage/types'
 import { Editor, type EditorApi } from './Editor'
 import { SectionRail } from './SectionRail'
@@ -15,12 +35,12 @@ import { FiguresGallery } from './FiguresGallery'
 import { exportDocToDocx, importDocxToHtml, isDocx } from './docxIO'
 import type { AISettings } from '@/components/research-note/ai/settings'
 import { useCloudNotebook } from '@/components/research-note/state/useCloudNotebook'
-import { ShareModal } from '@/components/research-note/features/collab/ShareModal'
 import { CommentsModal } from '@/components/research-note/features/collab/CommentsModal'
-import { canEdit, type EffectiveRole } from '@/components/research-note/features/collab/permissions'
+import { canEdit } from '@/components/research-note/features/collab/permissions'
 import { ELNPanel } from '@/components/research-note/features/eln/ELNPanel'
-import { ResearchChat } from '@/components/research-note/features/chat/ResearchChat'
 import { CloudSaveProvider } from '@/components/research-note/features/sync/CloudSave'
+import { assembleAllCaptured } from '@/components/research-note/ai/formatting'
+import { exportDraft } from '@/components/research-note/features/export/exporters'
 
 const DataWorkspace = lazy(() =>
   import('@/components/research-note/features/data/DataWorkspace').then((m) => ({ default: m.DataWorkspace })),
@@ -30,6 +50,20 @@ const OutputWorkspace = lazy(() =>
     default: m.OutputWorkspace,
   })),
 )
+const ProgressReportsWorkspace = lazy(() =>
+  import('@/components/research-note/features/progress/ProgressReportsWorkspace').then((m) => ({
+    default: m.ProgressReportsWorkspace,
+  })),
+)
+
+const TAB_ICONS: Record<AiDraftTabKey, ComponentType<{ className?: string }>> = {
+  notes: NotebookIcon,
+  data: TableIcon,
+  images: ImageIcon,
+  eln: FlaskIcon,
+  progressReports: ProgressIcon,
+  publication: ManuscriptIcon,
+}
 
 /**
  * Single AI Drafts workspace: Materials (notes), data, figures, lab log, and drafts.
@@ -39,32 +73,58 @@ export function NotebookView({
   settings,
   author,
   onBack,
-  onOpenAISearch,
 }: {
   projectId: string
   settings: AISettings
   author: string
   onBack: () => void
-  onOpenAISearch: () => void
 }) {
   const [draftTab, setDraftTab] = useState<AiDraftTabKey>('notes')
-  const [showShare, setShowShare] = useState(false)
-  const [showChat, setShowChat] = useState(false)
-  const [role, setRole] = useState<EffectiveRole>('owner')
   const [pendingNewNote, setPendingNewNote] = useState(0)
+  const [exportingCaptured, setExportingCaptured] = useState(false)
+  const [capturedError, setCapturedError] = useState<string | null>(null)
+  const [guideDismissed, setGuideDismissed] = useState<Partial<Record<AiDraftTabKey, boolean>>>({})
   const cloud = useCloudNotebook(projectId)
 
-  const canWrite = canEdit(role)
+  const canWrite = canEdit('owner')
+  const TabIcon = TAB_ICONS[draftTab]
+  const showGuide = !guideDismissed[draftTab]
 
   const requestNewNote = () => {
     setDraftTab('notes')
     setPendingNewNote((n) => n + 1)
   }
 
+  const onGenerateAllCapturedPdf = async () => {
+    if (exportingCaptured) return
+    setExportingCaptured(true)
+    setCapturedError(null)
+    try {
+      await cloud.saveNow()
+      const captured = await assembleAllCaptured(projectId)
+      if (!captured.trim()) {
+        setCapturedError(
+          'Nothing captured yet — add content in Materials, Data, Figures, Lab Log, reports, or manuscript sections.',
+        )
+        return
+      }
+      await exportDraft('pdf', 'All-Captured', captured)
+    } catch (err) {
+      setCapturedError(
+        err instanceof Error ? err.message : 'Could not generate captured PDF.',
+      )
+    } finally {
+      setExportingCaptured(false)
+    }
+  }
+
   if (!cloud.ready) {
     return (
-      <div className="flex h-screen items-center justify-center text-sm text-[var(--color-muted)]">
-        Loading notebook from cloud…
+      <div className="rn-workspace-loading">
+        <div className="rn-workspace-loading-card" role="status">
+          <NotebookIcon className="h-6 w-6" />
+          <p>Opening notebook…</p>
+        </div>
       </div>
     )
   }
@@ -79,143 +139,172 @@ export function NotebookView({
         lastSaved: cloud.lastSaved,
       }}
     >
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-2.5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
-        >
-          <ArrowLeftIcon /> Dashboard
-        </button>
-        <div className="mx-1 h-5 w-px bg-[var(--color-border)]" />
-        <ProjectTitle projectId={projectId} />
-        <span className="ml-2 hidden text-xs font-medium text-[var(--color-muted)] sm:inline">
-          AI Drafts
-        </span>
-
-        <div className="ml-auto flex items-center gap-3">
-          <nav className="flex flex-wrap items-center gap-1">
-            {(Object.entries(AI_DRAFT_TABS) as [AiDraftTabKey, string][]).map(
-              ([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setDraftTab(key)}
-                  className={[
-                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                    draftTab === key
-                      ? 'bg-[var(--color-brand)] text-[var(--color-brand-ink)]'
-                      : 'text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]',
-                  ].join(' ')}
-                >
-                  {label}
-                </button>
-              ),
-            )}
-          </nav>
-
-          {draftTab === 'notes' && canWrite && (
-            <button
-              type="button"
-              onClick={requestNewNote}
-              className="inline-flex items-center gap-1 rounded-md bg-[var(--color-brand)] px-2.5 py-1 text-xs font-medium text-[var(--color-brand-ink)]"
-            >
-              <PlusIcon className="h-3.5 w-3.5" /> New note
+      <div className="rn-workspace">
+        <header className="rn-workspace-topbar">
+          <div className="rn-workspace-topbar-start">
+            <button type="button" onClick={onBack} className="rn-workspace-back">
+              <ArrowLeftIcon className="h-4 w-4" />
+              <span>Library</span>
             </button>
-          )}
+            <div className="rn-workspace-title-block">
+              <p className="rn-workspace-eyebrow">Research Note</p>
+              <ProjectTitle projectId={projectId} />
+            </div>
+          </div>
 
-          <div className="flex items-center gap-2 border-l border-[var(--color-border)] pl-3 text-xs">
-            <span className="text-[var(--color-muted)]" title={cloud.error ?? undefined}>
+          <div className="rn-workspace-topbar-actions">
+            <span
+              className={`rn-workspace-save-status${cloud.error ? ' is-error' : ''}`}
+              title={cloud.error ?? undefined}
+            >
+              <SaveIcon className="h-3.5 w-3.5" />
               {cloud.error ? 'Save error' : cloud.statusLabel}
             </span>
             <button
               type="button"
               onClick={() => void cloud.saveNow()}
               disabled={cloud.saving}
-              className="rounded-md border border-[var(--color-border)] px-2.5 py-1 hover:bg-[var(--color-surface)] disabled:opacity-50"
+              className="rn-workspace-btn rn-workspace-btn-ghost"
             >
+              <SaveIcon className="h-3.5 w-3.5" />
               {cloud.saving ? 'Saving…' : 'Save'}
             </button>
-            <button
-              type="button"
-              onClick={() => setShowChat(true)}
-              className="rounded-md border border-[var(--color-border)] px-2.5 py-1 hover:bg-[var(--color-surface)]"
-            >
-              Ask
-            </button>
-            <button
-              type="button"
-              onClick={onOpenAISearch}
-              title="Search with AI"
-              className="rounded-md border border-[var(--color-border)] px-2.5 py-1 hover:bg-[var(--color-surface)]"
-            >
-              Web
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowShare(true)}
-              className="rounded-md border border-[var(--color-border)] px-2.5 py-1 hover:bg-[var(--color-surface)]"
-            >
-              Share
-            </button>
-            {role !== 'owner' && (
-              <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium uppercase text-amber-700" title="You are previewing as a collaborator">
-                {role === 'view' ? 'View-only' : 'Editor'}
-              </span>
+          </div>
+        </header>
+
+        {capturedError && (
+          <p className="rn-workspace-alert" role="alert">
+            {capturedError}
+          </p>
+        )}
+
+        <nav className="rn-workspace-topnav" aria-label="Notebook areas">
+          {AI_DRAFT_NAV_GROUPS.map((group, groupIndex) => (
+            <div key={group.id} className="rn-workspace-topnav-group">
+              {groupIndex > 0 && <span className="rn-workspace-topnav-divider" aria-hidden />}
+              {group.label ? (
+                <span className="rn-workspace-topnav-label">{group.label}</span>
+              ) : null}
+              <ul className="rn-workspace-topnav-list">
+                {group.keys.map((key) => {
+                  const Icon = TAB_ICONS[key]
+                  const active = draftTab === key
+                  return (
+                    <li key={key}>
+                      <button
+                        type="button"
+                        onClick={() => setDraftTab(key)}
+                        className={`rn-workspace-topnav-item${active ? ' is-active' : ''}`}
+                        aria-current={active ? 'page' : undefined}
+                        title={AI_DRAFT_HINTS[key]}
+                      >
+                        <Icon className="h-3.5 w-3.5" aria-hidden />
+                        <span>{AI_DRAFT_TABS[key]}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => void onGenerateAllCapturedPdf()}
+            disabled={exportingCaptured}
+            className="rn-workspace-topnav-download"
+            title="Download Materials, Data, Figures, Lab Log, reports, and filled manuscript sections as one PDF"
+          >
+            <DownloadIcon className="h-3.5 w-3.5" aria-hidden />
+            <span>{exportingCaptured ? 'Preparing…' : 'Compile Notebook'}</span>
+          </button>
+        </nav>
+
+        <div className="rn-workspace-body">
+          <div className="rn-workspace-main">
+            <div className="rn-workspace-panel-head">
+              <div className="rn-workspace-panel-identity">
+                <span className="rn-workspace-panel-icon" aria-hidden>
+                  <TabIcon className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="rn-workspace-panel-title">{AI_DRAFT_TABS[draftTab]}</h2>
+                  <p className="rn-workspace-panel-lead">{AI_DRAFT_HINTS[draftTab]}</p>
+                </div>
+              </div>
+              {draftTab === 'notes' && canWrite && (
+                <button
+                  type="button"
+                  onClick={requestNewNote}
+                  className="rn-workspace-btn rn-workspace-btn-primary"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  New note
+                </button>
+              )}
+            </div>
+
+            {showGuide && (
+              <div className="rn-workspace-guide" role="note">
+                <LightbulbIcon className="rn-workspace-guide-icon" />
+                <p>{AI_DRAFT_GUIDES[draftTab]}</p>
+                <button
+                  type="button"
+                  className="rn-workspace-guide-dismiss"
+                  aria-label="Dismiss tip"
+                  onClick={() =>
+                    setGuideDismissed((prev) => ({ ...prev, [draftTab]: true }))
+                  }
+                >
+                  <CloseIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
+
+            <div className="rn-workspace-panel-body">
+              {draftTab === 'notes' ? (
+                <NotesTab
+                  projectId={projectId}
+                  canWrite={canWrite}
+                  author={author}
+                  pendingNewNote={pendingNewNote}
+                />
+              ) : draftTab === 'data' ? (
+                <LazyTab>
+                  <DataWorkspace projectId={projectId} />
+                </LazyTab>
+              ) : draftTab === 'images' ? (
+                <FiguresGallery
+                  projectId={projectId}
+                  canWrite={canWrite}
+                  onOpenNotes={requestNewNote}
+                />
+              ) : draftTab === 'eln' ? (
+                <ELNPanel projectId={projectId} canWrite={canWrite} author={author} />
+              ) : draftTab === 'progressReports' ? (
+                <LazyTab>
+                  <ProgressReportsWorkspace
+                    projectId={projectId}
+                    settings={settings}
+                    canWrite={canWrite}
+                    author={author}
+                  />
+                </LazyTab>
+              ) : (
+                <LazyTab>
+                  <OutputWorkspace
+                    key={draftTab}
+                    projectId={projectId}
+                    settings={settings}
+                    canWrite={canWrite}
+                    author={author}
+                    outputType={draftTab as OutputTabKey}
+                  />
+                </LazyTab>
+              )}
+            </div>
           </div>
         </div>
-      </header>
-
-      <ShareModal
-        open={showShare}
-        onClose={() => setShowShare(false)}
-        projectId={projectId}
-        effectiveRole={role}
-        onChangeEffectiveRole={setRole}
-      />
-
-      <div className="flex min-h-0 flex-1">
-        {draftTab === 'notes' ? (
-          <NotesTab
-            projectId={projectId}
-            canWrite={canWrite}
-            author={author}
-            pendingNewNote={pendingNewNote}
-          />
-        ) : draftTab === 'data' ? (
-          <LazyTab>
-            <DataWorkspace projectId={projectId} />
-          </LazyTab>
-        ) : draftTab === 'images' ? (
-          <FiguresGallery
-            projectId={projectId}
-            canWrite={canWrite}
-            onOpenNotes={requestNewNote}
-          />
-        ) : draftTab === 'eln' ? (
-          <ELNPanel projectId={projectId} canWrite={canWrite} author={author} />
-        ) : (
-          <LazyTab>
-            <OutputWorkspace
-              key={draftTab}
-              projectId={projectId}
-              settings={settings}
-              canWrite={canWrite}
-              author={author}
-              outputType={draftTab as OutputTabKey}
-            />
-          </LazyTab>
-        )}
       </div>
-
-      <ResearchChat
-        open={showChat}
-        onClose={() => setShowChat(false)}
-        projectId={projectId}
-      />
-    </div>
     </CloudSaveProvider>
   )
 }
@@ -224,8 +313,8 @@ function LazyTab({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-1 items-center justify-center text-sm text-[var(--color-muted)]">
-          Loading…
+        <div className="rn-workspace-loading rn-workspace-loading-inline">
+          <p>Loading…</p>
         </div>
       }
     >
@@ -245,7 +334,7 @@ function ProjectTitle({ projectId }: { projectId: string }) {
       alive = false
     }
   }, [projectId])
-  return <h1 className="truncate text-sm font-semibold">{title}</h1>
+  return <h1 className="rn-workspace-project-title">{title}</h1>
 }
 
 function NotesTab({
@@ -323,14 +412,14 @@ function NotesTab({
 
   if (nb.loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-[var(--color-muted)]">
-        Loading notebook…
+      <div className="rn-workspace-loading rn-workspace-loading-inline">
+        <p>Loading materials…</p>
       </div>
     )
   }
 
   return (
-    <>
+    <div className="rn-notes-layout">
       <SectionRail
         sections={nb.sections}
         pages={nb.pages}
@@ -345,7 +434,7 @@ function NotesTab({
         onRemovePage={(id) => void nb.removePage(id)}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col bg-[var(--color-canvas)]">
+      <main className="rn-notes-editor">
         {nb.activePage ? (
           <>
             <input
@@ -355,40 +444,43 @@ function NotesTab({
               className="hidden"
               onChange={onImportDocx}
             />
-            <div className="flex w-full items-start gap-2 px-6 pt-6 sm:px-8">
+            <div className="rn-notes-editor-toolbar">
               <PageTitle
                 key={nb.activePage.id}
                 page={nb.activePage}
                 onRename={nb.renamePage}
                 readOnly={!canWrite}
               />
-              <div className="flex shrink-0 gap-1.5 pt-2">
+              <div className="rn-notes-editor-actions">
                 <button
                   type="button"
                   onClick={() => setShowComments(true)}
-                  className="rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
+                  className="rn-workspace-btn rn-workspace-btn-ghost"
                 >
+                  <CommentIcon className="h-3.5 w-3.5" />
                   Comments
                 </button>
                 {canWrite && (
                   <button
                     type="button"
                     onClick={() => docxInputRef.current?.click()}
-                    className="rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
+                    className="rn-workspace-btn rn-workspace-btn-ghost"
                   >
-                    Import .docx
+                    <ImportIcon className="h-3.5 w-3.5" />
+                    Import
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => void onExportDocx()}
-                  className="rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
+                  className="rn-workspace-btn rn-workspace-btn-ghost"
                 >
-                  Export .docx
+                  <ExportIcon className="h-3.5 w-3.5" />
+                  Export
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1">
+            <div className="rn-notes-editor-body">
               <Editor
                 key={nb.activePage.id}
                 pageId={nb.activePage.id}
@@ -412,12 +504,13 @@ function NotesTab({
         ) : nb.sections.length === 0 ? (
           <NotebookEmptyState onQuickStart={() => void quickStart()} />
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-[var(--color-muted)]">
-            Select a page, or add one from the left.
+          <div className="rn-notes-empty-select">
+            <InfoIcon className="h-5 w-5" />
+            <p>Select a page from the left, or add one to keep capturing materials.</p>
           </div>
         )}
       </main>
-    </>
+    </div>
   )
 }
 
@@ -453,25 +546,30 @@ function PageTitle({
       }}
       placeholder="Untitled page"
       aria-label="Page title"
-      className="w-full border-none bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-[var(--color-muted)]"
+      className="rn-notes-page-title"
     />
   )
 }
 
 function NotebookEmptyState({ onQuickStart }: { onQuickStart: () => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-      <h2 className="text-lg font-semibold">This notebook is empty</h2>
-      <p className="mt-1 max-w-sm text-sm text-[var(--color-muted)]">
-        Create your first note to start capturing research. Changes sync to your
-        GAHI account automatically.
+    <div className="rn-empty-panel">
+      <div className="rn-empty-panel-icon" aria-hidden>
+        <NotebookIcon className="h-7 w-7" />
+      </div>
+      <h2>Start capturing materials</h2>
+      <p>
+        Create your first note for readings, quotes, and working ideas. Everything you capture here
+        can later feed Progress Reports and the Manuscript.
       </p>
-      <button
-        type="button"
-        onClick={onQuickStart}
-        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-medium text-[var(--color-brand-ink)]"
-      >
-        <PlusIcon /> Create first note
+      <ol className="rn-empty-steps">
+        <li>Add a note for each source or theme</li>
+        <li>Paste quotes and annotate as you go</li>
+        <li>Move to Data, Figures, or Lab Log when you have evidence</li>
+      </ol>
+      <button type="button" onClick={onQuickStart} className="rn-workspace-btn rn-workspace-btn-primary">
+        <PlusIcon className="h-4 w-4" />
+        Create first note
       </button>
     </div>
   )

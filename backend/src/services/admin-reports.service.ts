@@ -1,10 +1,15 @@
 import { getUsageAnalytics } from "./admin-analytics.service.js";
 import { getAuditAlertStats, listAuditLogs, recordAuditEvent } from "./admin-audit.service.js";
 import { getApprovalStats } from "./admin-approvals.service.js";
+import { getAlertStats } from "./admin-alerts.service.js";
 import { getComplianceStats } from "./admin-compliance.service.js";
+import { getContributionStats } from "./admin-contributions.service.js";
 import { getIncidentStats } from "./admin-incidents.service.js";
 import { getAiSystemStats } from "./admin-inventory.service.js";
 import { getPolicyStats } from "./admin-policy.service.js";
+import { getPrivacyStats } from "./admin-privacy.service.js";
+import { getProvenanceStats } from "./admin-provenance.service.js";
+import { getRetentionStats } from "./admin-retention.service.js";
 import { getRiskStats } from "./admin-risk.service.js";
 import { GovernanceReportModel } from "../db/models/GovernanceReport.js";
 import { UserModel } from "../db/models/User.js";
@@ -70,6 +75,12 @@ export async function generateGovernanceReport(input: {
 	audience: GovernanceReportAudience;
 	periodStart?: string;
 	periodEnd?: string;
+	reportType?: string;
+	format?: string;
+	faculty?: string;
+	department?: string;
+	programme?: string;
+	userRole?: string;
 	actorId: string;
 }): Promise<GovernanceReportRecord> {
 	const periodEnd = input.periodEnd ? new Date(input.periodEnd) : new Date();
@@ -77,19 +88,39 @@ export async function generateGovernanceReport(input: {
 		? new Date(input.periodStart)
 		: new Date(periodEnd.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-	const [analytics, auditStats, policyStats, approvalStats, riskStats, complianceStats, incidentStats, inventoryStats, flagged, actor] =
-		await Promise.all([
-			getUsageAnalytics(),
-			getAuditAlertStats(),
-			getPolicyStats(),
-			getApprovalStats(),
-			getRiskStats(),
-			getComplianceStats(),
-			getIncidentStats(),
-			getAiSystemStats(),
-			listAuditLogs({ flaggedOnly: true, limit: 20 }),
-			UserModel.findById(input.actorId).select("name").lean(),
-		]);
+	const [
+		analytics,
+		auditStats,
+		alertStats,
+		policyStats,
+		approvalStats,
+		riskStats,
+		complianceStats,
+		incidentStats,
+		inventoryStats,
+		contributionStats,
+		provenanceStats,
+		privacyStats,
+		retentionStats,
+		flagged,
+		actor,
+	] = await Promise.all([
+		getUsageAnalytics(),
+		getAuditAlertStats(),
+		getAlertStats(),
+		getPolicyStats(),
+		getApprovalStats(),
+		getRiskStats(),
+		getComplianceStats(),
+		getIncidentStats(),
+		getAiSystemStats(),
+		getContributionStats(),
+		getProvenanceStats(),
+		getPrivacyStats(),
+		getRetentionStats(),
+		listAuditLogs({ flaggedOnly: true, limit: 20 }),
+		UserModel.findById(input.actorId).select("name").lean(),
+	]);
 
 	const audienceLabel =
 		input.audience === "senate"
@@ -98,9 +129,19 @@ export async function generateGovernanceReport(input: {
 				? "Management"
 				: "Management and Senate";
 
-	const title = `AI Governance Report — ${audienceLabel} (${periodStart.toISOString().slice(0, 10)} to ${periodEnd.toISOString().slice(0, 10)})`;
+	const reportTypeLabel = input.reportType?.trim() || "AI Governance Report";
+	const filterBits = [
+		input.faculty ? `Faculty: ${input.faculty}` : null,
+		input.department ? `Department: ${input.department}` : null,
+		input.programme ? `Programme: ${input.programme}` : null,
+		input.userRole ? `Role: ${input.userRole}` : null,
+	].filter(Boolean);
+
+	const title = `${reportTypeLabel} — ${audienceLabel} (${periodStart.toISOString().slice(0, 10)} to ${periodEnd.toISOString().slice(0, 10)})`;
 
 	const summary = [
+		`Report type: ${reportTypeLabel}.`,
+		filterBits.length ? `Filters — ${filterBits.join("; ")}.` : null,
 		`Institutional AI use across research: ${analytics.totals.activeUsers} active accounts,`,
 		`${analytics.totals.sessions} research sessions, ${analytics.totals.ideaSessions} idea generations,`,
 		`${analytics.totals.papers} saved papers, and ${analytics.totals.tokensUsed.toLocaleString()} tokens consumed.`,
@@ -111,7 +152,15 @@ export async function generateGovernanceReport(input: {
 		`Policy posture: ${policyStats.permitted} permitted, ${policyStats.restricted} restricted, ${policyStats.blocked} blocked rules.`,
 		`Approvals: ${approvalStats.pending} pending, ${approvalStats.approved} approved, ${approvalStats.rejected} rejected.`,
 		`Audit: ${auditStats.flagged} flagged events (${auditStats.high} high / ${auditStats.critical} critical).`,
-	].join(" ");
+		`Governance alerts: ${alertStats.active} active (${alertStats.critical} critical).`,
+		`AI contribution statements: ${contributionStats.verified}/${contributionStats.total} verified; ${contributionStats.incomplete} incomplete disclosures.`,
+		`Provenance reviews: ${provenanceStats.underReview} under review, ${provenanceStats.escalated} escalated.`,
+		`Privacy rules: ${privacyStats.enabled} enabled (${privacyStats.neverRaw} deny admin raw access).`,
+		`Retention: ${retentionStats.enabled} policies; ${retentionStats.deletionOpen} open deletion/export requests.`,
+		input.format ? `Requested export format: ${input.format}.` : null,
+	]
+		.filter(Boolean)
+		.join(" ");
 
 	const sections = [
 		{
@@ -182,25 +231,56 @@ export async function generateGovernanceReport(input: {
 			metrics: approvalStats,
 		},
 		{
-			heading: "10. Oversight conclusion",
+			heading: "10. AI contribution & provenance transparency",
+			body: [
+				`Contribution statements on file: ${contributionStats.total} (${contributionStats.verified} verified, ${contributionStats.incomplete} incomplete).`,
+				`Provenance records: ${provenanceStats.total} (${provenanceStats.underReview} under review, ${provenanceStats.cleared} cleared, ${provenanceStats.escalated} escalated).`,
+				"These records support academic integrity reviews without exposing raw research content.",
+			].join(" "),
+			metrics: { contributionStats, provenanceStats },
+		},
+		{
+			heading: "11. Privacy, retention, and deletion",
+			body: [
+				`Privacy controls: ${privacyStats.enabled} active rules; admin raw research access denied by ${privacyStats.neverRaw} rules.`,
+				`Retention policies: ${retentionStats.enabled} enabled (${retentionStats.legalHolds} legal holds).`,
+				`Deletion/export requests: ${retentionStats.deletionOpen} open of ${retentionStats.deletionTotal} total (${retentionStats.deletionCompleted} completed).`,
+			].join(" "),
+			metrics: { privacyStats, retentionStats, alertStats },
+		},
+		{
+			heading: "12. Oversight conclusion",
 			body:
 				input.audience === "senate"
-					? "Senate is invited to note the evidence base above and request Management follow-up on compliance gaps, high residual risks, active incidents, and pending DPIAs that affect academic integrity or data protection."
-					: "Management is invited to close compliance gaps, treat high residual risks, resolve active incidents, complete pending DPIAs, and confirm policy changes for faculties with highest intensity of use.",
+					? "Senate is invited to note the evidence base above and request Management follow-up on compliance gaps, high residual risks, active incidents, pending DPIAs, incomplete AI disclosures, and open retention/deletion requests that affect academic integrity or data protection."
+					: "Management is invited to close compliance gaps, treat high residual risks, resolve active incidents and alerts, complete pending DPIAs, verify AI contribution statements, and confirm retention/privacy policies for faculties with highest intensity of use.",
 		},
 	];
 
 	const metrics = {
 		analytics,
 		auditStats,
+		alertStats,
 		policyStats,
 		approvalStats,
 		riskStats,
 		complianceStats,
 		incidentStats,
 		inventoryStats,
+		contributionStats,
+		provenanceStats,
+		privacyStats,
+		retentionStats,
 		periodStart: periodStart.toISOString(),
 		periodEnd: periodEnd.toISOString(),
+		reportType: reportTypeLabel,
+		format: input.format ?? null,
+		filters: {
+			faculty: input.faculty ?? null,
+			department: input.department ?? null,
+			programme: input.programme ?? null,
+			userRole: input.userRole ?? null,
+		},
 	};
 
 	const doc = await GovernanceReportModel.create({

@@ -588,15 +588,41 @@ function wrapLines(
 	const clean = normalizePdfText(text);
 	if (!clean) return [];
 
+	const width = Math.max(24, maxWidth);
 	doc.setFont(fontName, fontStyle);
 	doc.setFontSize(fontSize);
 
 	const split = (doc as unknown as { splitTextToSize: (t: string, w: number) => string[] }).splitTextToSize;
 	if (typeof split === "function") {
-		return split.call(doc, clean, maxWidth);
+		const lines = split.call(doc, clean, width).map((line) => normalizePdfText(String(line)));
+		const safe: string[] = [];
+		for (const line of lines) {
+			if (!line) continue;
+			doc.setFont(fontName, fontStyle);
+			doc.setFontSize(fontSize);
+			// Guard against rare metric misses that leave a line wider than the page.
+			if (doc.getTextWidth(line) <= width + 0.5) {
+				safe.push(line);
+				continue;
+			}
+			const words = line.split(/\s+/).filter(Boolean);
+			let current = "";
+			for (const word of words) {
+				const trial = current ? `${current} ${word}` : word;
+				doc.setFont(fontName, fontStyle);
+				doc.setFontSize(fontSize);
+				if (!current || doc.getTextWidth(trial) <= width) {
+					current = trial;
+				} else {
+					safe.push(current);
+					current = word;
+				}
+			}
+			if (current) safe.push(current);
+		}
+		return safe.length ? safe : [clean];
 	}
 
-	// Fallback: one line if splitTextToSize unavailable.
 	return [clean];
 }
 
@@ -635,30 +661,34 @@ export async function renderResearchPaperPdf(
 		factor: number,
 		x: number,
 		color: [number, number, number] = COLOR.text,
-		align: "left" | "justify" = "left",
+		_align: "left" | "justify" = "left",
 		lineMaxWidth = maxWidth,
 	) => {
 		doc.setFont(FONT, face);
 		doc.setFontSize(size);
 		doc.setTextColor(...color);
 		const lh = lineHeight(size, factor);
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]!;
-			ensure(lh);
-			const words = line.split(/\s+/).filter(Boolean);
-			const justify = align === "justify" && i < lines.length - 1 && words.length > 1;
-			if (justify) {
-				const wordsWidth = words.reduce((sum, word) => sum + doc.getTextWidth(word), 0);
-				const gap = (lineMaxWidth - wordsWidth) / (words.length - 1);
-				let cursor = x;
-				for (const word of words) {
-					doc.text(word, cursor, y);
-					cursor += doc.getTextWidth(word) + gap;
-				}
-			} else {
-				doc.text(line, x, y);
+		for (const rawLine of lines) {
+			const line = normalizePdfText(rawLine);
+			if (!line) {
+				y += lh * 0.35;
+				continue;
 			}
-			y += lh;
+			doc.setFont(FONT, face);
+			doc.setFontSize(size);
+			// Re-wrap any line that still exceeds the printable width.
+			const parts =
+				doc.getTextWidth(line) > lineMaxWidth + 0.5
+					? wrapLines(doc, line, lineMaxWidth, FONT, face, size)
+					: [line];
+			for (const part of parts) {
+				ensure(lh);
+				doc.setFont(FONT, face);
+				doc.setFontSize(size);
+				doc.setTextColor(...color);
+				doc.text(part, x, y);
+				y += lh;
+			}
 		}
 	};
 
@@ -957,7 +987,7 @@ export async function renderResearchPaperPdf(
 				y += 4;
 				break;
 			case "body":
-				drawLeft(text, SIZE.body, "normal", LEADING.body, 0, "justify");
+				drawLeft(text, SIZE.body, "normal", LEADING.body, 0, "left");
 				y += 6;
 				break;
 			case "gap":

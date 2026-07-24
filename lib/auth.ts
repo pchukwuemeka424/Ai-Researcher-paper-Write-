@@ -4,10 +4,19 @@ export type AuthUser = {
 	id: string;
 	name: string;
 	email: string;
-	role: "lecturer" | "admin" | "viewer" | "researcher" | "student";
+	role:
+		| "lecturer"
+		| "admin"
+		| "viewer"
+		| "researcher"
+		| "student"
+		| "governance_admin"
+		| "faculty_admin"
+		| "auditor";
 	status: "active" | "inactive";
 	department: string | null;
 	institution: string | null;
+	universityId: string | null;
 	lastActiveAt: string | null;
 	createdAt: string;
 	tokenQuota?: StudentTokenQuota;
@@ -19,6 +28,7 @@ export type RegisterInput = {
 	password: string;
 	department: string;
 	institution?: string;
+	catalogueId?: string;
 };
 
 export type StudentRegisterInput = RegisterInput;

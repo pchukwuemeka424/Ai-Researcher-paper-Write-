@@ -182,7 +182,41 @@ export async function recordAuditEvent(input: RecordAuditInput): Promise<AuditLo
 		immutableHash: computeHash(hashPayload),
 	});
 
-	return toRecord(doc.toObject());
+	const record = toRecord(doc.toObject());
+
+	if (record.alertSent && input.action !== "alert.opened") {
+		try {
+			const { createAlert } = await import("./admin-alerts.service.js");
+			await createAlert({
+				title: input.flagReason ?? autoFlag ?? input.summary.slice(0, 120),
+				summary: input.summary,
+				kind:
+					autoFlag || input.flagReason?.toLowerCase().includes("sensitive")
+						? "sensitive_data"
+						: input.category === "policy"
+							? "policy_breach"
+							: "high_risk_activity",
+				severity: severity === "critical" || severity === "high" ? severity : "high",
+				faculty: faculty ?? undefined,
+				department: department ?? undefined,
+				actorEmail,
+				actorName,
+				actorRole,
+				linkedAuditId: record.id,
+				context: {
+					action: input.action,
+					category: input.category,
+					targetType: input.targetType,
+					targetId: input.targetId,
+				},
+				notificationSent: true,
+			});
+		} catch {
+			// Alert fan-out must not break immutable audit writes.
+		}
+	}
+
+	return record;
 }
 
 export async function listAuditLogs(options: {

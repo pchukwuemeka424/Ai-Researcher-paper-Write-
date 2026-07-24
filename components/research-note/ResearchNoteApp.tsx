@@ -4,7 +4,6 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 
 import { Dashboard } from "@/components/research-note/features/dashboard/Dashboard";
 import { SearchModal } from "@/components/research-note/features/search/SearchModal";
-import { AISearchModal } from "@/components/research-note/features/search-ai/AISearchModal";
 import { useSettings } from "@/components/research-note/state/useSettings";
 import { useTheme } from "@/components/research-note/state/useTheme";
 import type { AuthUser as NoteAuthUser } from "@/components/research-note/state/useAuth";
@@ -37,7 +36,6 @@ type Props = {
 export function ResearchNoteApp({ author }: Props) {
 	const [view, setView] = useState<View>({ kind: "dashboard" });
 	const [showSearch, setShowSearch] = useState(false);
-	const [showAISearch, setShowAISearch] = useState(false);
 	const ai = useSettings();
 	const theme = useTheme();
 
@@ -61,10 +59,7 @@ export function ResearchNoteApp({ author }: Props) {
 	const openProject = (projectId: string) => setView({ kind: "project", projectId });
 
 	const modals = (
-		<>
-			<SearchModal open={showSearch} onClose={() => setShowSearch(false)} onOpenProject={openProject} />
-			<AISearchModal open={showAISearch} onClose={() => setShowAISearch(false)} />
-		</>
+		<SearchModal open={showSearch} onClose={() => setShowSearch(false)} onOpenProject={openProject} />
 	);
 
 	let body: ReactNode;
@@ -84,7 +79,6 @@ export function ResearchNoteApp({ author }: Props) {
 						settings={ai.settings}
 						author={noteUser.name}
 						onBack={() => setView({ kind: "dashboard" })}
-						onOpenAISearch={() => setShowAISearch(true)}
 					/>
 				</Suspense>
 				{modals}

@@ -321,7 +321,7 @@ function citationInstructions(
     'Introduction especially: cite when stating the problem significance, the knowledge gap, and related prior approaches, drawing on a broad set of bank entries.',
     'Literature Review especially: organise by theme and cite multiple sources per theme; avoid one-paper-per-paragraph catalogues.',
     'When refining, keep the user write-up as the spine and ADD missing citations from the bank until the minimum is met.',
-    'Never invent authors or years. Bibliography entries are saved automatically to Publication → References.',
+    'Never invent authors or years. Bibliography entries are saved automatically to Manuscript → References.',
   ].join(' ')
 }
 
@@ -444,8 +444,9 @@ export function buildAgentPrompt(
     : `Now write the **${target}**. Coordinate with sibling drafts already present so the manuscript stays consistent.`
 
   const materialsBlock = [
-    '## Connected project evidence (Data, Figures, Lab Log, References, drafts — Materials excluded)',
-    bundle.prioritizedMaterial || '_(No data, lab log, figures, references, or drafts captured yet.)_',
+    '## Connected project evidence (capture order: Materials, Data, Figures, Lab Log, Progress Reports, manuscript drafts — Materials excluded from section prose)',
+    bundle.prioritizedMaterial ||
+      '_(No Materials, Data, Figures, Lab Log, Progress Reports, or manuscript sections captured yet.)_',
   ].join('\n')
 
   const literatureBlock = bundle.literature ? `${bundle.literature}\n` : ''

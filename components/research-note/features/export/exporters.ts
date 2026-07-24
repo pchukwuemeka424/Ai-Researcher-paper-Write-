@@ -91,6 +91,27 @@ function toLatex(markdown: string): string {
       case 'hr':
         body.push('\\hrulefill')
         break
+      case 'table': {
+        const cols = Math.max(1, b.headers.length)
+        const spec = 'l'.repeat(cols)
+        const row = (cells: string[]) =>
+          cells.map((c) => escapeLatex(c)).join(' & ') + ' \\\\'
+        body.push(
+          [
+            `\\begin{tabular}{${spec}}`,
+            '\\hline',
+            row(b.headers),
+            '\\hline',
+            ...b.rows.map(row),
+            '\\hline',
+            '\\end{tabular}',
+          ].join('\n'),
+        )
+        break
+      }
+      case 'image':
+        body.push(`% Figure: ${escapeLatex(b.alt)}`)
+        break
     }
   }
   return [
@@ -157,6 +178,19 @@ async function exportDocx(base: string, markdown: string): Promise<void> {
           }),
         )
         break
+      case 'table': {
+        const lines = [
+          b.headers.join(' | '),
+          ...b.rows.map((r) => r.join(' | ')),
+        ]
+        for (const line of lines) {
+          children.push(new Paragraph({ children: [new TextRun({ text: line, font: 'Consolas', size: 18 })] }))
+        }
+        break
+      }
+      case 'image':
+        children.push(new Paragraph({ children: [new TextRun(`[Figure: ${b.alt}]`)] }))
+        break
     }
   }
   if (children.length === 0) children.push(new Paragraph({ children: [] }))
@@ -193,14 +227,101 @@ async function exportPdf(base: string, markdown: string): Promise<void> {
     }
   }
   const writeLines = (text: string, size: number, bold: boolean, indent = 0) => {
+    const clean = sanitizePdfPlainText(text)
+    if (!clean) return
     doc.setFont('helvetica', bold ? 'bold' : 'normal')
     doc.setFontSize(size)
-    const lines = doc.splitTextToSize(text, width - indent) as string[]
+    doc.setTextColor(15, 23, 42)
+    const maxW = Math.max(24, width - indent)
+    const lines = doc.splitTextToSize(clean, maxW) as string[]
     const lh = size * 1.35
     for (const line of lines) {
       ensure(lh)
+      doc.setFont('helvetica', bold ? 'bold' : 'normal')
+      doc.setFontSize(size)
       doc.text(line, margin + indent, y)
       y += lh
+    }
+  }
+
+  const drawTable = (headers: string[], rows: string[][]) => {
+    const cols = Math.max(1, headers.length)
+    const colW = width / cols
+    const pad = 4
+    const fontSize = cols > 5 ? 8 : cols > 3 ? 9 : 10
+    const lineH = fontSize * 1.25
+
+    const measureRow = (cells: string[]) => {
+      let maxLines = 1
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(fontSize)
+      for (let c = 0; c < cols; c++) {
+        const text = sanitizePdfPlainText(cells[c] ?? '')
+        const wrapped = doc.splitTextToSize(text, colW - pad * 2) as string[]
+        maxLines = Math.max(maxLines, wrapped.length)
+      }
+      return Math.max(lineH + pad * 2, maxLines * lineH + pad * 2)
+    }
+
+    const paintRow = (cells: string[], header: boolean) => {
+      const rowH = measureRow(cells)
+      ensure(rowH + 2)
+      doc.setDrawColor(200)
+      doc.setFillColor(header ? 241 : 255, header ? 245 : 255, header ? 249 : 255)
+      doc.rect(margin, y, width, rowH, 'FD')
+      doc.setFont('helvetica', header ? 'bold' : 'normal')
+      doc.setFontSize(fontSize)
+      doc.setTextColor(15, 23, 42)
+      for (let c = 0; c < cols; c++) {
+        const text = sanitizePdfPlainText(cells[c] ?? '')
+        const wrapped = doc.splitTextToSize(text, colW - pad * 2) as string[]
+        let ty = y + pad + fontSize
+        for (const line of wrapped) {
+          doc.setFont('helvetica', header ? 'bold' : 'normal')
+          doc.setFontSize(fontSize)
+          doc.text(line, margin + c * colW + pad, ty)
+          ty += lineH
+        }
+        if (c > 0) {
+          doc.setDrawColor(220)
+          doc.line(margin + c * colW, y, margin + c * colW, y + rowH)
+        }
+      }
+      y += rowH
+    }
+
+    y += 4
+    paintRow(headers, true)
+    for (const row of rows) paintRow(row, false)
+    y += 8
+  }
+
+  const drawImage = async (alt: string, src: string) => {
+    if (!src.startsWith('data:image/') && !/^https?:\/\//i.test(src)) {
+      writeLines(`[Image: ${alt}]`, 10, false)
+      y += 4
+      return
+    }
+    try {
+      const prepared = await prepareImageForPdf(src)
+      const maxW = width
+      const maxH = Math.min(pageH - margin * 2 - 40, 320)
+      let drawW = prepared.width
+      let drawH = prepared.height
+      const scale = Math.min(maxW / drawW, maxH / drawH, 1)
+      drawW *= scale
+      drawH *= scale
+      ensure(drawH + 28)
+      if (alt.trim()) {
+        writeLines(alt, 10, true)
+        y += 2
+      }
+      ensure(drawH + 4)
+      doc.addImage(prepared.data, prepared.format, margin, y, drawW, drawH)
+      y += drawH + 10
+    } catch {
+      writeLines(`[Image could not be embedded: ${alt}]`, 10, false)
+      y += 4
     }
   }
 
@@ -220,12 +341,14 @@ async function exportPdf(base: string, markdown: string): Promise<void> {
         y += 4
         break
       case 'code':
-        doc.setFont('courier', 'normal')
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(9)
         for (const line of b.text.split('\n')) {
-          doc.setFontSize(9)
-          const wrapped = doc.splitTextToSize(line, width) as string[]
+          const wrapped = doc.splitTextToSize(sanitizePdfPlainText(line), width) as string[]
           for (const w of wrapped) {
             ensure(12)
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(9)
             doc.text(w, margin, y)
             y += 12
           }
@@ -245,9 +368,73 @@ async function exportPdf(base: string, markdown: string): Promise<void> {
         doc.line(margin, y, pageW - margin, y)
         y += 10
         break
+      case 'table':
+        drawTable(b.headers, b.rows)
+        break
+      case 'image':
+        await drawImage(b.alt, b.src)
+        break
     }
   }
   download(doc.output('blob'), `${base}.pdf`)
+}
+
+/** Keep PDF body text in one Helvetica-safe ASCII stream so wrapping stays stable. */
+function sanitizePdfPlainText(raw: string): string {
+  return raw
+    .replace(/[\u00a0\u1680\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, ' ')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .trim()
+}
+
+async function prepareImageForPdf(
+  src: string,
+): Promise<{ data: string; format: 'JPEG' | 'PNG'; width: number; height: number }> {
+  if (src.startsWith('data:image/jpeg') || src.startsWith('data:image/jpg')) {
+    const dims = await loadImageDims(src)
+    return { data: src, format: 'JPEG', ...dims }
+  }
+  if (src.startsWith('data:image/png')) {
+    const dims = await loadImageDims(src)
+    return { data: src, format: 'PNG', ...dims }
+  }
+
+  const image = await loadHtmlImage(src)
+  const canvas = document.createElement('canvas')
+  const maxEdge = 1600
+  const scale = Math.min(1, maxEdge / Math.max(image.width, image.height))
+  canvas.width = Math.max(1, Math.round(image.width * scale))
+  canvas.height = Math.max(1, Math.round(image.height * scale))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Could not process image')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+  return {
+    data: canvas.toDataURL('image/jpeg', 0.88),
+    format: 'JPEG',
+    width: canvas.width,
+    height: canvas.height,
+  }
+}
+
+function loadHtmlImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Could not load image'))
+    image.src = src
+  })
+}
+
+async function loadImageDims(src: string): Promise<{ width: number; height: number }> {
+  const image = await loadHtmlImage(src)
+  return { width: image.width || 1, height: image.height || 1 }
 }
 
 // ─────────────────────────────── PowerPoint ───────────────────────────
@@ -295,6 +482,12 @@ function groupIntoSlides(blocks: MdBlock[]): { title: string; lines: string[] }[
     if (b.type === 'heading') current.lines.push(b.text)
     else if (b.type === 'paragraph' || b.type === 'quote') current.lines.push(b.text)
     else if (b.type === 'list') current.lines.push(...b.items)
+    else if (b.type === 'table') {
+      current.lines.push(b.headers.join(' | '))
+      for (const row of b.rows) current.lines.push(row.join(' | '))
+    } else if (b.type === 'image') {
+      current.lines.push(`[Figure: ${b.alt}]`)
+    }
   }
   return groups
 }

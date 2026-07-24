@@ -121,13 +121,6 @@ function wholeDocAgent(
 
 const WHOLE_DOC_AGENTS: SectionAgent[] = [
   wholeDocAgent(
-    'labReports',
-    'Lab Reports',
-    'Lab Report Agent — produce a complete lab report from experimental materials.',
-    'Structure as Aim, Materials & Methods, Results, and Discussion. Ground strictly in Lab Log, Data, Figures, and notes.',
-    ['labLog', 'data', 'figures', 'notes', 'drafts', 'references'],
-  ),
-  wholeDocAgent(
     'progressReports',
     'Progress Reports',
     'Progress Report Agent — summarise progress, blockers, and next steps.',

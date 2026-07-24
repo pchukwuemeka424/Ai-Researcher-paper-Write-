@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
@@ -10,7 +11,6 @@ import {
 	formatAdminDate,
 	formatAdminRelative,
 } from "@/components/admin/AdminShell";
-import { useAdminTable } from "@/hooks/useAdminTable";
 import {
 	AdminTokenEditModal,
 	formatTokenCount,
@@ -18,6 +18,8 @@ import {
 	tokenUsagePercent,
 } from "@/components/admin/AdminTokenEditModal";
 import { useAdminGuard } from "@/hooks/useAdminGuard";
+import { useAdminTable } from "@/hooks/useAdminTable";
+import { useAdminUserQuery } from "@/hooks/useAdminUserQuery";
 import {
 	bulkAdminDeleteUsers,
 	bulkAdminResetTokens,
@@ -29,12 +31,8 @@ import {
 	resetAdminUserPassword,
 	updateAdminUser,
 } from "@/lib/admin-api";
-import type { CreateUserInput, UserRecord } from "@/lib/dashboard";
-
-function roleLabel(role: UserRecord["role"]): string {
-	if (role === "researcher") return "Lecturer";
-	return role.charAt(0).toUpperCase() + role.slice(1);
-}
+import type { CreateUserInput, UserRecord, UserRole } from "@/lib/dashboard";
+import { USER_ROLE_OPTIONS, userRoleLabel } from "@/lib/dashboard";
 
 type UserFormMode = "create" | "edit";
 
@@ -43,17 +41,31 @@ type UserFormProps = {
 	initial?: Partial<CreateUserInput>;
 	title: string;
 	submitLabel: string;
+	roleOptions?: Array<{ label: string; value: UserRole }>;
 	onSubmit: (input: CreateUserInput) => Promise<void>;
 	onCancel: () => void;
 };
 
-function UserForm({ mode, initial, title, submitLabel, onSubmit, onCancel }: UserFormProps) {
+function UserForm({
+	mode,
+	initial,
+	title,
+	submitLabel,
+	roleOptions = USER_ROLE_OPTIONS,
+	onSubmit,
+	onCancel,
+}: UserFormProps) {
 	const [name, setName] = useState(initial?.name ?? "");
 	const [email, setEmail] = useState(initial?.email ?? "");
-	const [role, setRole] = useState<UserRecord["role"]>(initial?.role ?? "lecturer");
+	const [role, setRole] = useState<UserRole>(
+		(initial?.role === "viewer" ? "auditor" : initial?.role) ?? "lecturer",
+	);
 	const [status, setStatus] = useState<UserRecord["status"]>(initial?.status ?? "active");
 	const [department, setDepartment] = useState(initial?.department ?? "");
 	const [institution, setInstitution] = useState(initial?.institution ?? "");
+	const [faculty, setFaculty] = useState(initial?.faculty ?? "");
+	const [programme, setProgramme] = useState(initial?.programme ?? "");
+	const [cohort, setCohort] = useState(initial?.cohort ?? "");
 	const [password, setPassword] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -70,6 +82,9 @@ function UserForm({ mode, initial, title, submitLabel, onSubmit, onCancel }: Use
 				status,
 				department: department.trim() || undefined,
 				institution: institution.trim() || undefined,
+				faculty: faculty.trim() || undefined,
+				programme: programme.trim() || undefined,
+				cohort: cohort.trim() || undefined,
 				...(mode === "create" && password ? { password } : {}),
 			});
 		} catch (err) {
@@ -92,7 +107,7 @@ function UserForm({ mode, initial, title, submitLabel, onSubmit, onCancel }: Use
 					<div className="admin-form-grid">
 						<div>
 							<label className="field-label" htmlFor="user-name">
-								Full name
+								Name
 							</label>
 							<input
 								id="user-name"
@@ -116,6 +131,50 @@ function UserForm({ mode, initial, title, submitLabel, onSubmit, onCancel }: Use
 							/>
 						</div>
 						<div>
+							<label className="field-label" htmlFor="user-role">
+								Role
+							</label>
+							<select
+								id="user-role"
+								className="topic-input"
+								value={role}
+								onChange={(e) => setRole(e.target.value as UserRole)}
+							>
+								{roleOptions.map((opt) => (
+									<option key={opt.value} value={opt.value}>
+										{opt.label}
+									</option>
+								))}
+							</select>
+						</div>
+						<div>
+							<label className="field-label" htmlFor="user-status">
+								Status
+							</label>
+							<select
+								id="user-status"
+								className="topic-input"
+								value={status}
+								onChange={(e) => setStatus(e.target.value as UserRecord["status"])}
+							>
+								<option value="active">Active</option>
+								<option value="inactive">Inactive / deactivated</option>
+								<option value="suspended">Suspended</option>
+							</select>
+						</div>
+						<div>
+							<label className="field-label" htmlFor="user-faculty">
+								Faculty
+							</label>
+							<input
+								id="user-faculty"
+								className="topic-input"
+								value={faculty}
+								onChange={(e) => setFaculty(e.target.value)}
+								placeholder="Optional"
+							/>
+						</div>
+						<div>
 							<label className="field-label" htmlFor="user-department">
 								Department
 							</label>
@@ -124,6 +183,30 @@ function UserForm({ mode, initial, title, submitLabel, onSubmit, onCancel }: Use
 								className="topic-input"
 								value={department}
 								onChange={(e) => setDepartment(e.target.value)}
+								placeholder="Optional"
+							/>
+						</div>
+						<div>
+							<label className="field-label" htmlFor="user-programme">
+								Programme
+							</label>
+							<input
+								id="user-programme"
+								className="topic-input"
+								value={programme}
+								onChange={(e) => setProgramme(e.target.value)}
+								placeholder="Optional"
+							/>
+						</div>
+						<div>
+							<label className="field-label" htmlFor="user-cohort">
+								Cohort
+							</label>
+							<input
+								id="user-cohort"
+								className="topic-input"
+								value={cohort}
+								onChange={(e) => setCohort(e.target.value)}
 								placeholder="Optional"
 							/>
 						</div>
@@ -138,36 +221,6 @@ function UserForm({ mode, initial, title, submitLabel, onSubmit, onCancel }: Use
 								onChange={(e) => setInstitution(e.target.value)}
 								placeholder="Optional"
 							/>
-						</div>
-						<div>
-							<label className="field-label" htmlFor="user-role">
-								Role
-							</label>
-							<select
-								id="user-role"
-								className="topic-input"
-								value={role}
-								onChange={(e) => setRole(e.target.value as UserRecord["role"])}
-							>
-								<option value="lecturer">Lecturer</option>
-								<option value="student">Student</option>
-								<option value="admin">Admin</option>
-								<option value="viewer">Viewer</option>
-							</select>
-						</div>
-						<div>
-							<label className="field-label" htmlFor="user-status">
-								Status
-							</label>
-							<select
-								id="user-status"
-								className="topic-input"
-								value={status}
-								onChange={(e) => setStatus(e.target.value as UserRecord["status"])}
-							>
-								<option value="active">Active</option>
-								<option value="inactive">Inactive</option>
-							</select>
 						</div>
 					</div>
 					{mode === "create" && (
@@ -249,7 +302,9 @@ function ResetPasswordModal({
 					</button>
 				</div>
 				<form className="dash-form" onSubmit={handleSubmit}>
-					<p className="muted">Set a new password for {user.name} ({user.email})</p>
+					<p className="muted">
+						Set a new password for {user.name} ({user.email})
+					</p>
 					<label className="field-label" htmlFor="new-password">
 						New password
 					</label>
@@ -291,12 +346,107 @@ function ResetPasswordModal({
 	);
 }
 
+function AssignFieldModal({
+	user,
+	field,
+	label,
+	roleOptions = USER_ROLE_OPTIONS,
+	onClose,
+	onSaved,
+}: {
+	user: UserRecord;
+	field: "role" | "faculty" | "department" | "programme";
+	label: string;
+	roleOptions?: Array<{ label: string; value: UserRole }>;
+	onClose: () => void;
+	onSaved: () => Promise<void>;
+}) {
+	const [value, setValue] = useState(
+		field === "role"
+			? user.role === "viewer"
+				? "auditor"
+				: user.role
+			: (user[field] ?? ""),
+	);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setSaving(true);
+		setError(null);
+		try {
+			await updateAdminUser(user.id, {
+				[field]: field === "role" ? value : value.trim() || undefined,
+			} as CreateUserInput);
+			await onSaved();
+			onClose();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<div className="modal-backdrop" onClick={onClose}>
+			<div className="modal dash-modal" onClick={(e) => e.stopPropagation()}>
+				<div className="modal-header">
+					<h3>{label}</h3>
+					<button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+						×
+					</button>
+				</div>
+				<form className="dash-form" onSubmit={handleSubmit}>
+					<p className="muted">
+						{user.name} · {user.email}
+					</p>
+					<label className="field-label" htmlFor="assign-field">
+						{label.replace(/^Assign /, "")}
+					</label>
+					{field === "role" ? (
+						<select
+							id="assign-field"
+							className="topic-input"
+							value={value}
+							onChange={(e) => setValue(e.target.value)}
+						>
+							{roleOptions.map((opt) => (
+								<option key={opt.value} value={opt.value}>
+									{opt.label}
+								</option>
+							))}
+						</select>
+					) : (
+						<input
+							id="assign-field"
+							className="topic-input"
+							value={value}
+							onChange={(e) => setValue(e.target.value)}
+							required
+						/>
+					)}
+					{error && <p className="error-text">{error}</p>}
+					<div className="dash-form-actions">
+						<button type="button" className="ghost-btn" onClick={onClose}>
+							Cancel
+						</button>
+						<button type="submit" className="primary-btn" disabled={saving}>
+							{saving ? "Saving…" : "Save"}
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	);
+}
+
 export function AdminUsersDashboard() {
-	const { ready } = useAdminGuard();
+	const { ready, user: actor } = useAdminGuard();
 	const [users, setUsers] = useState<UserRecord[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [search, setSearch] = useState("");
+	const [search, setSearch] = useAdminUserQuery();
 	const [roleFilter, setRoleFilter] = useState("all");
 	const [statusFilter, setStatusFilter] = useState("all");
 	const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -304,7 +454,17 @@ export function AdminUsersDashboard() {
 	const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
 	const [resetUser, setResetUser] = useState<UserRecord | null>(null);
 	const [editingTokenUser, setEditingTokenUser] = useState<UserRecord | null>(null);
+	const [assignTarget, setAssignTarget] = useState<{
+		user: UserRecord;
+		field: "role" | "faculty" | "department" | "programme";
+		label: string;
+	} | null>(null);
 	const [bulkWorking, setBulkWorking] = useState(false);
+
+	const roleOptions = useMemo(() => {
+		if (actor?.role === "admin") return USER_ROLE_OPTIONS;
+		return USER_ROLE_OPTIONS.filter((opt) => opt.value !== "admin");
+	}, [actor?.role]);
 
 	const loadUsers = useCallback(async () => {
 		setError(null);
@@ -326,13 +486,21 @@ export function AdminUsersDashboard() {
 	const query = search.trim().toLowerCase();
 	const filtered = useMemo(() => {
 		return users.filter((user) => {
-			if (roleFilter !== "all" && user.role !== roleFilter) return false;
+			if (roleFilter !== "all") {
+				if (roleFilter === "auditor") {
+					if (user.role !== "auditor" && user.role !== "viewer") return false;
+				} else if (user.role !== roleFilter) {
+					return false;
+				}
+			}
 			if (statusFilter !== "all" && user.status !== statusFilter) return false;
 			if (!query) return true;
 			return (
 				user.name.toLowerCase().includes(query) ||
 				user.email.toLowerCase().includes(query) ||
+				(user.faculty?.toLowerCase().includes(query) ?? false) ||
 				(user.department?.toLowerCase().includes(query) ?? false) ||
+				(user.programme?.toLowerCase().includes(query) ?? false) ||
 				(user.institution?.toLowerCase().includes(query) ?? false)
 			);
 		});
@@ -388,12 +556,12 @@ export function AdminUsersDashboard() {
 		await loadUsers();
 	};
 
-	const toggleStatus = async (user: UserRecord) => {
-		await updateAdminUser(user.id, { status: user.status === "active" ? "inactive" : "active" });
+	const setStatus = async (user: UserRecord, status: UserRecord["status"]) => {
+		await updateAdminUser(user.id, { status });
 		await loadUsers();
 	};
 
-	const runBulkStatus = async (status: "active" | "inactive") => {
+	const runBulkStatus = async (status: "active" | "inactive" | "suspended") => {
 		const ids = Array.from(selected);
 		if (ids.length === 0) return;
 		setBulkWorking(true);
@@ -442,20 +610,20 @@ export function AdminUsersDashboard() {
 	};
 
 	const activeCount = users.filter((u) => u.status === "active").length;
-	const adminCount = users.filter((u) => u.role === "admin").length;
+	const suspendedCount = users.filter((u) => u.status === "suspended").length;
+	const adminCount = users.filter(
+		(u) => u.role === "admin" || u.role === "governance_admin" || u.role === "faculty_admin",
+	).length;
 
 	const userColumns = useMemo(
 		() => [
 			{
-				key: "account",
-				header: "Account",
+				key: "name",
+				header: "Name",
 				cell: (user: UserRecord) => (
 					<>
 						<span className="admin-cell-name">{user.name}</span>
 						<span className="admin-cell-sub">{user.email}</span>
-						{user.institution && (
-							<span className="admin-cell-sub">{user.institution}</span>
-						)}
 					</>
 				),
 			},
@@ -464,52 +632,14 @@ export function AdminUsersDashboard() {
 				header: "Role",
 				cell: (user: UserRecord) => (
 					<span className={`dash-badge dash-badge-role-${user.role}`}>
-						{roleLabel(user.role)}
+						{userRoleLabel(user.role)}
 					</span>
 				),
 			},
 			{
-				key: "status",
-				header: "Status",
-				cell: (user: UserRecord) => (
-					<button
-						type="button"
-						className={`dash-badge dash-badge-status-${user.status}`}
-						onClick={() => void toggleStatus(user)}
-						title="Toggle status"
-					>
-						{user.status}
-					</button>
-				),
-			},
-			{
-				key: "tokens",
-				header: "Tokens",
-				cell: (user: UserRecord) =>
-					user.tokenQuota ? (
-						<>
-							<span className="dash-mono">
-								{formatTokenCount(user.tokenQuota.used)} /{" "}
-								{formatTokenCount(user.tokenQuota.allowance)}
-							</span>
-							<span className="dash-token-usage">
-								<span
-									className="dash-token-bar"
-									style={{
-										width: `${tokenUsagePercent(
-											user.tokenQuota.used,
-											user.tokenQuota.allowance,
-										)}%`,
-									}}
-								/>
-								<span className="muted">
-									{tokenUsagePercent(user.tokenQuota.used, user.tokenQuota.allowance)}%
-								</span>
-							</span>
-						</>
-					) : (
-						<span className="muted">—</span>
-					),
+				key: "faculty",
+				header: "Faculty",
+				cell: (user: UserRecord) => user.faculty ?? "—",
 			},
 			{
 				key: "department",
@@ -517,8 +647,27 @@ export function AdminUsersDashboard() {
 				cell: (user: UserRecord) => user.department ?? "—",
 			},
 			{
-				key: "lastActive",
-				header: "Last active",
+				key: "programme",
+				header: "Programme",
+				cell: (user: UserRecord) => user.programme ?? "—",
+			},
+			{
+				key: "status",
+				header: "Status",
+				cell: (user: UserRecord) => (
+					<span className={`dash-badge dash-badge-status-${user.status}`}>{user.status}</span>
+				),
+			},
+			{
+				key: "registered",
+				header: "Registration",
+				cell: (user: UserRecord) => (
+					<span className="muted">{formatAdminDate(user.createdAt)}</span>
+				),
+			},
+			{
+				key: "lastLogin",
+				header: "Last login",
 				cell: (user: UserRecord) => (
 					<span className="muted" title={formatAdminDate(user.lastActiveAt)}>
 						{formatAdminRelative(user.lastActiveAt)}
@@ -526,59 +675,184 @@ export function AdminUsersDashboard() {
 				),
 			},
 			{
-				key: "joined",
-				header: "Joined",
-				cell: (user: UserRecord) => (
-					<span className="muted">{formatAdminDate(user.createdAt)}</span>
-				),
+				key: "aiUsage",
+				header: "AI usage",
+				cell: (user: UserRecord) =>
+					user.tokenQuota ? (
+						<span className="dash-mono">{formatTokenCount(user.tokenQuota.used)}</span>
+					) : (
+						<span className="muted">—</span>
+					),
+			},
+			{
+				key: "tokenUsage",
+				header: "Tokens",
+				cell: (user: UserRecord) =>
+					user.tokenQuota ? (
+						<span className="admin-token-cell">
+							<span className="dash-mono">
+								{formatTokenCount(user.tokenQuota.used)}/
+								{formatTokenCount(user.tokenQuota.allowance)}
+							</span>
+							<span
+								className="admin-token-bar-track"
+								title={`${tokenUsagePercent(user.tokenQuota.used, user.tokenQuota.allowance)}%`}
+							>
+								<span
+									className="admin-token-bar-fill"
+									style={{
+										width: `${tokenUsagePercent(
+											user.tokenQuota.used,
+											user.tokenQuota.allowance,
+										)}%`,
+									}}
+								/>
+							</span>
+						</span>
+					) : (
+						<span className="muted">—</span>
+					),
 			},
 			{
 				key: "actions",
-				header: "",
+				header: "Actions",
 				align: "right" as const,
 				cell: (user: UserRecord) => (
-					<div className="admin-row-actions">
+					<div className="admin-row-actions admin-row-actions-compact">
 						<button type="button" className="ghost-btn" onClick={() => setEditingUser(user)}>
 							Edit
 						</button>
-						<button type="button" className="ghost-btn" onClick={() => setResetUser(user)}>
-							Reset pwd
-						</button>
+						{user.status !== "active" ? (
+							<button
+								type="button"
+								className="ghost-btn"
+								onClick={() => void setStatus(user, "active")}
+							>
+								Activate
+							</button>
+						) : (
+							<button
+								type="button"
+								className="ghost-btn"
+								onClick={() => void setStatus(user, "suspended")}
+							>
+								Suspend
+							</button>
+						)}
 						{user.tokenQuota && (
-							<>
-								<button
-									type="button"
-									className="ghost-btn"
-									onClick={() => setEditingTokenUser(user)}
-								>
-									Tokens
+							<button
+								type="button"
+								className="ghost-btn"
+								onClick={() => setEditingTokenUser(user)}
+							>
+								Tokens
+							</button>
+						)}
+						<details className="admin-actions-menu">
+							<summary className="ghost-btn admin-actions-menu-trigger">More</summary>
+							<div
+								className="admin-actions-menu-panel"
+								onClick={(e) => {
+									const root = (e.currentTarget.parentElement as HTMLDetailsElement | null);
+									if (root) root.open = false;
+								}}
+							>
+								{user.status !== "inactive" && (
+									<button
+										type="button"
+										onClick={() => void setStatus(user, "inactive")}
+									>
+										Deactivate
+									</button>
+								)}
+								<button type="button" onClick={() => setResetUser(user)}>
+									Reset password
 								</button>
 								<button
 									type="button"
-									className="ghost-btn"
 									onClick={() =>
-										void resetUserTokensQuick(
-											{
-												id: user.id,
-												name: user.name,
-												role: user.role,
-												tokenQuota: user.tokenQuota ?? null,
-											},
-											loadUsers,
-										)
+										setAssignTarget({ user, field: "role", label: "Assign Role" })
 									}
 								>
-									Reset tokens
+									Assign role
 								</button>
-							</>
-						)}
-						<button
-							type="button"
-							className="danger-btn"
-							onClick={() => void removeUser(user.id)}
-						>
-							Delete
-						</button>
+								<button
+									type="button"
+									onClick={() =>
+										setAssignTarget({ user, field: "faculty", label: "Assign Faculty" })
+									}
+								>
+									Assign faculty
+								</button>
+								<button
+									type="button"
+									onClick={() =>
+										setAssignTarget({
+											user,
+											field: "department",
+											label: "Assign Department",
+										})
+									}
+								>
+									Assign department
+								</button>
+								<button
+									type="button"
+									onClick={() =>
+										setAssignTarget({
+											user,
+											field: "programme",
+											label: "Assign Programme",
+										})
+									}
+								>
+									Assign programme
+								</button>
+								{user.tokenQuota && (
+									<button
+										type="button"
+										onClick={() =>
+											void resetUserTokensQuick(
+												{
+													id: user.id,
+													name: user.name,
+													role: user.role,
+													tokenQuota: user.tokenQuota ?? null,
+												},
+												loadUsers,
+											)
+										}
+									>
+										Reset tokens
+									</button>
+								)}
+								<Link href={`/admin/audit?user=${encodeURIComponent(user.email)}`}>
+									Audit history
+								</Link>
+								<Link href={`/admin/analytics?user=${encodeURIComponent(user.email)}`}>
+									AI activity
+								</Link>
+								<Link href={`/admin/tokens?user=${encodeURIComponent(user.email)}`}>
+									Token usage
+								</Link>
+								<Link href={`/admin/alerts?user=${encodeURIComponent(user.email)}`}>
+									Alerts
+								</Link>
+								<Link href={`/admin/incidents?user=${encodeURIComponent(user.email)}`}>
+									Incidents
+								</Link>
+								<Link href={`/admin/retention?user=${encodeURIComponent(user.email)}`}>
+									Data retention
+								</Link>
+								<button
+									type="button"
+									className="admin-actions-menu-danger"
+									onClick={() => void removeUser(user.id)}
+								>
+									Delete
+								</button>
+							</div>
+						</details>
 					</div>
 				),
 			},
@@ -588,12 +862,12 @@ export function AdminUsersDashboard() {
 
 	return (
 		<AdminShell
-			title="Accounts"
-			subtitle="Manage users, roles, and access control"
-			breadcrumb="Admin Console"
+			title="Account management"
+			subtitle="Create accounts, assign roles and organisational units, and manage activation status"
+			breadcrumb="Admin · Users"
 			actions={
 				<button type="button" className="primary-btn" onClick={() => setShowCreate(true)}>
-					Add account
+					Create User
 				</button>
 			}
 		>
@@ -603,8 +877,8 @@ export function AdminUsersDashboard() {
 			<section className="admin-stats">
 				<AdminStatCard label="Total accounts" value={users.length} accent="primary" />
 				<AdminStatCard label="Active" value={activeCount} accent="success" />
-				<AdminStatCard label="Inactive" value={users.length - activeCount} />
-				<AdminStatCard label="Administrators" value={adminCount} accent="warning" />
+				<AdminStatCard label="Suspended" value={suspendedCount} accent="warning" />
+				<AdminStatCard label="Administrators" value={adminCount} accent="danger" />
 			</section>
 
 			<AdminPanel
@@ -633,9 +907,9 @@ export function AdminUsersDashboard() {
 					loading={loading}
 					search={search}
 					onSearchChange={setSearch}
-					searchPlaceholder="Search name, email, department…"
+					searchPlaceholder="Search name, email, faculty, department…"
 					hasActiveFilters={Boolean(query) || roleFilter !== "all" || statusFilter !== "all"}
-					emptyMessage="No accounts yet. Add your first team member."
+					emptyMessage="No accounts yet. Create your first user."
 					emptyFilteredMessage="No accounts match your filters."
 					filters={
 						<>
@@ -646,10 +920,11 @@ export function AdminUsersDashboard() {
 								aria-label="Filter by role"
 							>
 								<option value="all">All roles</option>
-								<option value="lecturer">Lecturer</option>
-								<option value="student">Student</option>
-								<option value="admin">Admin</option>
-								<option value="viewer">Viewer</option>
+								{USER_ROLE_OPTIONS.map((opt) => (
+									<option key={opt.value} value={opt.value}>
+										{opt.label}
+									</option>
+								))}
 							</select>
 							<select
 								className="topic-input admin-toolbar-select"
@@ -660,6 +935,7 @@ export function AdminUsersDashboard() {
 								<option value="all">All statuses</option>
 								<option value="active">Active</option>
 								<option value="inactive">Inactive</option>
+								<option value="suspended">Suspended</option>
 							</select>
 						</>
 					}
@@ -694,6 +970,14 @@ export function AdminUsersDashboard() {
 										type="button"
 										className="ghost-btn"
 										disabled={bulkWorking}
+										onClick={() => void runBulkStatus("suspended")}
+									>
+										Suspend
+									</button>
+									<button
+										type="button"
+										className="ghost-btn"
+										disabled={bulkWorking}
 										onClick={() => void runBulkResetTokens()}
 									>
 										Reset tokens
@@ -706,7 +990,11 @@ export function AdminUsersDashboard() {
 									>
 										Delete
 									</button>
-									<button type="button" className="ghost-btn" onClick={() => setSelected(new Set())}>
+									<button
+										type="button"
+										className="ghost-btn"
+										onClick={() => setSelected(new Set())}
+									>
 										Clear
 									</button>
 								</div>
@@ -720,8 +1008,9 @@ export function AdminUsersDashboard() {
 			{showCreate && (
 				<UserForm
 					mode="create"
-					title="Add account"
-					submitLabel="Create account"
+					title="Create User"
+					submitLabel="Create User"
+					roleOptions={roleOptions}
 					onSubmit={createUser}
 					onCancel={() => setShowCreate(false)}
 				/>
@@ -730,8 +1019,9 @@ export function AdminUsersDashboard() {
 			{editingUser && (
 				<UserForm
 					mode="edit"
-					title="Edit account"
+					title="Edit User"
 					submitLabel="Save changes"
+					roleOptions={roleOptions}
 					initial={{
 						name: editingUser.name,
 						email: editingUser.email,
@@ -739,6 +1029,9 @@ export function AdminUsersDashboard() {
 						status: editingUser.status,
 						department: editingUser.department ?? "",
 						institution: editingUser.institution ?? "",
+						faculty: editingUser.faculty ?? "",
+						programme: editingUser.programme ?? "",
+						cohort: editingUser.cohort ?? "",
 					}}
 					onSubmit={(input) => saveUser(editingUser.id, input)}
 					onCancel={() => setEditingUser(null)}
@@ -749,6 +1042,17 @@ export function AdminUsersDashboard() {
 				<ResetPasswordModal
 					user={resetUser}
 					onClose={() => setResetUser(null)}
+					onSaved={loadUsers}
+				/>
+			)}
+
+			{assignTarget && (
+				<AssignFieldModal
+					user={assignTarget.user}
+					field={assignTarget.field}
+					label={assignTarget.label}
+					roleOptions={roleOptions}
+					onClose={() => setAssignTarget(null)}
 					onSaved={loadUsers}
 				/>
 			)}

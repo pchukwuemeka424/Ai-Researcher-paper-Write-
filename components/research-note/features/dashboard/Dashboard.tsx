@@ -6,9 +6,14 @@ import { NavIcon } from "@/components/aula/NavIcon";
 import { Modal } from "@/components/research-note/components/Modal";
 import {
 	ClockIcon,
+	FlaskIcon,
+	ImageIcon,
+	LightbulbIcon,
+	ManuscriptIcon,
 	NotebookIcon,
 	PlusIcon,
 	SearchIcon,
+	TableIcon,
 	TargetIcon,
 	TrashIcon,
 } from "@/components/research-note/components/icons";
@@ -91,11 +96,65 @@ export function Dashboard({ onOpenProject }: { onOpenProject: (projectId: string
 					</div>
 					<div>
 						<p className="research-page-eyebrow">Workspace</p>
-						<h1 className="research-page-title">Notebooks</h1>
+						<h1 className="research-page-title">Research Note</h1>
 						<p className="research-page-lead">{APP_TAGLINE}</p>
 					</div>
 				</div>
 			</header>
+
+			<section className="rn-howto" aria-label="How Research Note works">
+				<div className="rn-howto-head">
+					<LightbulbIcon className="h-4 w-4" />
+					<h2>How to use this workspace</h2>
+				</div>
+				<ol className="rn-howto-steps">
+					<li>
+						<span className="rn-howto-icon" aria-hidden>
+							<NotebookIcon className="h-4 w-4" />
+						</span>
+						<div>
+							<strong>Create a notebook</strong>
+							<p>One notebook = one research thread. Name it clearly and set a short focus.</p>
+						</div>
+					</li>
+					<li>
+						<span className="rn-howto-icon" aria-hidden>
+							<TableIcon className="h-4 w-4" />
+						</span>
+						<div>
+							<strong>Capture evidence</strong>
+							<p>Use Materials, Data, Figures, and Lab Log before you draft formal write-ups.</p>
+						</div>
+					</li>
+					<li>
+						<span className="rn-howto-icon" aria-hidden>
+							<FlaskIcon className="h-4 w-4" />
+						</span>
+						<div>
+							<strong>Log experiments</strong>
+							<p>Lab Log keeps timestamped, append-only records that feed Methods and Results.</p>
+						</div>
+					</li>
+					<li>
+						<span className="rn-howto-icon" aria-hidden>
+							<ImageIcon className="h-4 w-4" />
+						</span>
+						<div>
+							<strong>Keep figures ready</strong>
+							<p>Upload plots and photos so they appear in exports and manuscript drafts.</p>
+						</div>
+					</li>
+					<li>
+						<span className="rn-howto-icon" aria-hidden>
+							<ManuscriptIcon className="h-4 w-4" />
+						</span>
+						<div>
+							<strong>Write section by section</strong>
+							<p>Draft Progress Reports or the Manuscript, then download a PDF of everything captured.</p>
+						</div>
+					</li>
+				</ol>
+			</section>
 
 			{loading ? (
 				<div className="rn-dashboard-state" role="status">
@@ -113,8 +172,8 @@ export function Dashboard({ onOpenProject }: { onOpenProject: (projectId: string
 					</div>
 					<h2>No notebooks yet</h2>
 					<p>
-						Your research notebooks will appear here. Create a note to start capturing ideas,
-						data, and drafts.
+						Create a Research Note to capture Materials, Data, Figures, and Lab Log in one place —
+						then draft reports and your manuscript from the same notebook.
 					</p>
 					<button type="button" className="rn-empty-cta" onClick={openNew}>
 						<PlusIcon className="h-4 w-4" />
@@ -267,7 +326,7 @@ export function Dashboard({ onOpenProject }: { onOpenProject: (projectId: string
 				open={showNew}
 				onClose={() => !creating && setShowNew(false)}
 				title="New Research Note"
-				description="Start a governed notebook for one research thread. You’ll capture notes, data, and AI drafts in one place."
+				description="Start a governed notebook for one research thread. You’ll capture Materials, Data, Figures, Lab Log, and drafts in one place."
 				wide
 			>
 				<form onSubmit={(e) => void submitNew(e)} className="rn-new-form">
@@ -283,8 +342,8 @@ export function Dashboard({ onOpenProject }: { onOpenProject: (projectId: string
 								notebook is meant to answer.
 							</li>
 							<li>
-								After you create it, open the notebook and use Materials, Data, Figures, and drafts in one AI Drafts workspace.
-								when you’re ready to write up findings.
+								Inside the notebook: capture in Materials → Data → Figures → Lab Log, then write
+								Progress Reports or the Manuscript.
 							</li>
 						</ul>
 					</aside>

@@ -112,7 +112,7 @@ function extractNotebookText(notebookData: unknown): string {
 			(typeof d.content === "string" ? stripHtml(d.content) : extractRichText(d.content));
 		if (isPubTitle && text) {
 			publicationTitle = text.replace(/\s+/g, " ").trim();
-			chunks.unshift(`Publication title: ${publicationTitle}`);
+			chunks.unshift(`Manuscript title: ${publicationTitle}`);
 			continue;
 		}
 		if (text) {
@@ -242,11 +242,11 @@ async function buildProjectContext(
 	].filter(Boolean);
 
 	const notebookText = extractNotebookText(project.notebookData);
-	// Prefer Publication → Title from notebook as the canonical study title.
-	const pubTitleMatch = notebookText.match(/^Publication title:\s*(.+)$/m);
+	// Prefer Manuscript → Title from notebook as the canonical study title.
+	const pubTitleMatch = notebookText.match(/^(?:Manuscript|Publication) title:\s*(.+)$/m);
 	if (pubTitleMatch?.[1]?.trim()) {
 		chunks.unshift(
-			`Suggested interest topic / study title (from Publication → Title): ${pubTitleMatch[1].trim()}`,
+			`Suggested interest topic / study title (from Manuscript → Title): ${pubTitleMatch[1].trim()}`,
 		);
 	} else {
 		chunks.unshift(`Suggested interest topic / study title: ${project.title}`);

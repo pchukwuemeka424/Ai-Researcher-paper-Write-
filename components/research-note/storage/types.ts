@@ -120,7 +120,6 @@ export interface Reference {
 export type OutputType =
   | 'thesis'
   | 'dissertation'
-  | 'labReports'
   | 'progressReports'
   | 'publication'
 

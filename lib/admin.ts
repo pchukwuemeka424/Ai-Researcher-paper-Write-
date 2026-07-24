@@ -29,6 +29,9 @@ export type AdminTokenRecord = {
 	name: string;
 	email: string;
 	role: string;
+	faculty?: string | null;
+	department?: string | null;
+	programme?: string | null;
 	tokenQuota: StudentTokenQuota | null;
 };
 
@@ -37,6 +40,10 @@ export type TokenAdminStats = {
 	studentsWithQuota: number;
 	lecturersWithQuota: number;
 	totalTokensUsed: number;
+	dailyTokensApprox?: number;
+	weeklyTokensApprox?: number;
+	monthlyTokensApprox?: number;
+	estimatedCost?: number;
 };
 
 export type UpdateTokenInput = { reset?: boolean; tokensUsed?: number };

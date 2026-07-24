@@ -10,21 +10,28 @@ import type { Dataset, RichTextDoc } from '@/components/research-note/storage/ty
  * MCP resources with no refactor (spec §5a).
  */
 
-/** Render a dataset as a Markdown-ish table the model can read. */
-export function datasetToTable(dataset: Dataset): string {
-  const header = dataset.columns.map((c) => c.name).join(' | ')
-  const divider = dataset.columns.map(() => '---').join(' | ')
-  const body = dataset.rows
-    .map((row) =>
-      dataset.columns
-        .map((c) => {
-          const v = row.cells[c.id]
-          return v === null || v === undefined ? '' : String(v)
-        })
-        .join(' | '),
-    )
+/** Render a dataset as a GFM Markdown table the model / PDF exporter can read. */
+export function datasetToTable(dataset: Dataset, maxRows?: number): string {
+  const rows =
+    typeof maxRows === 'number' && maxRows >= 0
+      ? dataset.rows.slice(0, maxRows)
+      : dataset.rows
+  const header = `| ${dataset.columns.map((c) => escapeCell(c.name)).join(' | ')} |`
+  const divider = `| ${dataset.columns.map(() => '---').join(' | ')} |`
+  const body = rows
+    .map((row) => {
+      const cells = dataset.columns.map((c) => {
+        const v = row.cells[c.id]
+        return escapeCell(v === null || v === undefined ? '' : String(v))
+      })
+      return `| ${cells.join(' | ')} |`
+    })
     .join('\n')
-  return `Dataset: ${dataset.name}\n${header}\n${divider}\n${body}`
+  return body ? `${header}\n${divider}\n${body}` : `${header}\n${divider}`
+}
+
+function escapeCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim()
 }
 
 /** Compact per-column summary line (types + row count) for quick AI context. */

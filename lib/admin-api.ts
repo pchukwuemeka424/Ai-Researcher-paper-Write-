@@ -9,14 +9,19 @@ import type {
 	UpdateTokenInput,
 } from "@/lib/admin";
 import type {
+	AiContributionStatementRecord,
 	AiSystemRecord,
 	AiSystemStats,
+	AlertStats,
 	ApprovalRequestRecord,
 	ApprovalStats,
 	AuditAlertStats,
 	AuditLogRecord,
 	ComplianceControlRecord,
 	ComplianceStats,
+	ContributionStats,
+	DeletionRequestRecord,
+	GovernanceAlertRecord,
 	GovernanceDashboard,
 	GovernanceIncidentRecord,
 	GovernancePolicyRecord,
@@ -26,6 +31,12 @@ import type {
 	IncidentStats,
 	PolicyEvaluation,
 	PolicyStats,
+	PrivacyStats,
+	ProvenanceStats,
+	ResearchPrivacySettingRecord,
+	ResearchProvenanceRecord,
+	RetentionPolicyRecord,
+	RetentionStats,
 	RiskStats,
 	UsageAnalytics,
 } from "@/lib/admin-governance";
@@ -124,6 +135,54 @@ export async function fetchAdminUsers(): Promise<UserRecord[]> {
 	return data.users;
 }
 
+export async function fetchAdminConsoleAdmins(): Promise<UserRecord[]> {
+	const data = await adminJson<{ users: UserRecord[] }>("/api/admin/admins");
+	return data.users;
+}
+
+export type UniversityRecord = {
+	id: string;
+	catalogueId: string;
+	name: string;
+	slug: string;
+	status: "active" | "inactive";
+	userCount: number;
+	adminCount: number;
+	onboardedAt: string | null;
+	createdAt: string;
+	updatedAt: string;
+};
+
+export async function fetchAdminUniversities(): Promise<UniversityRecord[]> {
+	const data = await adminJson<{ universities: UniversityRecord[] }>("/api/admin/universities");
+	return data.universities;
+}
+
+export async function onboardAdminUniversity(input: {
+	catalogueId: string;
+	name: string;
+	status?: "active" | "inactive";
+}): Promise<UniversityRecord> {
+	const data = await adminJson<{ university: UniversityRecord }>("/api/admin/universities", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.university;
+}
+
+export async function updateAdminUniversity(
+	id: string,
+	input: Partial<{ name: string; status: "active" | "inactive" }>,
+): Promise<UniversityRecord> {
+	const data = await adminJson<{ university: UniversityRecord }>(`/api/admin/universities/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.university;
+}
+
 export async function createAdminUser(input: CreateUserInput & { password?: string }): Promise<UserRecord> {
 	const data = await adminJson<{ user: UserRecord }>("/api/admin/users", {
 		method: "POST",
@@ -154,7 +213,10 @@ export async function resetAdminUserPassword(id: string, password: string): Prom
 	});
 }
 
-export async function bulkAdminUserStatus(ids: string[], status: "active" | "inactive"): Promise<number> {
+export async function bulkAdminUserStatus(
+	ids: string[],
+	status: "active" | "inactive" | "suspended",
+): Promise<number> {
 	const data = await adminJson<{ updated: number }>("/api/admin/users/bulk-status", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -252,13 +314,28 @@ export async function downloadAdminBackupFile(filename: string): Promise<void> {
 }
 
 export function exportUsersCsv(users: UserRecord[]): void {
-	const headers = ["Name", "Email", "Role", "Status", "Department", "Institution", "Last Active", "Joined"];
+	const headers = [
+		"Name",
+		"Email",
+		"Role",
+		"Status",
+		"Faculty",
+		"Department",
+		"Programme",
+		"Cohort",
+		"Institution",
+		"Last Active",
+		"Joined",
+	];
 	const rows = users.map((user) => [
 		user.name,
 		user.email,
 		user.role,
 		user.status,
+		user.faculty ?? "",
 		user.department ?? "",
+		user.programme ?? "",
+		user.cohort ?? "",
 		user.institution ?? "",
 		user.lastActiveAt ?? "",
 		user.createdAt,
@@ -285,6 +362,17 @@ export async function fetchGovernanceDashboard(): Promise<GovernanceDashboard> {
 export async function fetchUsageAnalytics(): Promise<UsageAnalytics> {
 	const data = await adminJson<{ analytics: UsageAnalytics }>("/api/admin/analytics");
 	return data.analytics;
+}
+
+export async function fetchAdminAnalytics(): Promise<UsageAnalytics> {
+	return fetchUsageAnalytics();
+}
+
+export async function fetchAdminOverview() {
+	const data = await adminJson<{ overview: import("@/lib/admin-governance").PlatformOverview }>(
+		"/api/admin/overview",
+	);
+	return data.overview;
 }
 
 export async function fetchAdminPolicies(): Promise<{
@@ -441,14 +529,20 @@ export async function fetchAdminReport(id: string): Promise<GovernanceReportReco
 }
 
 export async function generateAdminReport(input: {
-	audience: GovernanceReportAudience;
+	audience?: GovernanceReportAudience;
 	periodStart?: string;
 	periodEnd?: string;
+	reportType?: string;
+	format?: string;
+	faculty?: string;
+	department?: string;
+	programme?: string;
+	userRole?: string;
 }): Promise<GovernanceReportRecord> {
 	const data = await adminJson<{ report: GovernanceReportRecord }>("/api/admin/reports/generate", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(input),
+		body: JSON.stringify({ audience: "both", ...input }),
 	});
 	return data.report;
 }
@@ -635,4 +729,252 @@ export async function updateAdminInventorySystem(
 
 export async function deleteAdminInventorySystem(id: string): Promise<void> {
 	await adminJson(`/api/admin/inventory/${id}`, { method: "DELETE" });
+}
+
+/* ── Alerts / contributions / provenance / privacy / retention ───────── */
+
+export async function fetchAdminAlerts(params?: {
+	status?: string;
+	severity?: string;
+	kind?: string;
+}): Promise<{ alerts: GovernanceAlertRecord[]; stats: AlertStats }> {
+	const qs = new URLSearchParams();
+	if (params?.status) qs.set("status", params.status);
+	if (params?.severity) qs.set("severity", params.severity);
+	if (params?.kind) qs.set("kind", params.kind);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ alerts: GovernanceAlertRecord[]; stats: AlertStats }>(
+		`/api/admin/alerts${suffix}`,
+	);
+	return { alerts: data.alerts ?? [], stats: data.stats! };
+}
+
+export async function createAdminAlert(
+	input: Record<string, unknown>,
+): Promise<GovernanceAlertRecord> {
+	const data = await adminJson<{ alert: GovernanceAlertRecord }>("/api/admin/alerts", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.alert;
+}
+
+export async function updateAdminAlert(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<GovernanceAlertRecord> {
+	const data = await adminJson<{ alert: GovernanceAlertRecord }>(`/api/admin/alerts/${id}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.alert;
+}
+
+export async function fetchAdminContributions(params?: {
+	verified?: boolean;
+	disclosureComplete?: boolean;
+	outputType?: string;
+}): Promise<{ statements: AiContributionStatementRecord[]; stats: ContributionStats }> {
+	const qs = new URLSearchParams();
+	if (params?.verified === true) qs.set("verified", "1");
+	if (params?.verified === false) qs.set("verified", "0");
+	if (params?.disclosureComplete === true) qs.set("disclosureComplete", "1");
+	if (params?.disclosureComplete === false) qs.set("disclosureComplete", "0");
+	if (params?.outputType) qs.set("outputType", params.outputType);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{
+		statements: AiContributionStatementRecord[];
+		stats: ContributionStats;
+	}>(`/api/admin/contributions${suffix}`);
+	return { statements: data.statements ?? [], stats: data.stats! };
+}
+
+export async function createAdminContribution(
+	input: Record<string, unknown>,
+): Promise<AiContributionStatementRecord> {
+	const data = await adminJson<{ statement: AiContributionStatementRecord }>(
+		"/api/admin/contributions",
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.statement;
+}
+
+export async function updateAdminContribution(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<AiContributionStatementRecord> {
+	const data = await adminJson<{ statement: AiContributionStatementRecord }>(
+		`/api/admin/contributions/${id}`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.statement;
+}
+
+export async function fetchAdminProvenance(params?: {
+	status?: string;
+	outputType?: string;
+}): Promise<{ records: ResearchProvenanceRecord[]; stats: ProvenanceStats }> {
+	const qs = new URLSearchParams();
+	if (params?.status) qs.set("status", params.status);
+	if (params?.outputType) qs.set("outputType", params.outputType);
+	const suffix = qs.toString() ? `?${qs.toString()}` : "";
+	const data = await adminJson<{ records: ResearchProvenanceRecord[]; stats: ProvenanceStats }>(
+		`/api/admin/provenance${suffix}`,
+	);
+	return { records: data.records ?? [], stats: data.stats! };
+}
+
+export async function createAdminProvenance(
+	input: Record<string, unknown>,
+): Promise<ResearchProvenanceRecord> {
+	const data = await adminJson<{ record: ResearchProvenanceRecord }>("/api/admin/provenance", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.record;
+}
+
+export async function updateAdminProvenance(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<ResearchProvenanceRecord> {
+	const data = await adminJson<{ record: ResearchProvenanceRecord }>(
+		`/api/admin/provenance/${id}`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.record;
+}
+
+export async function fetchAdminPrivacy(): Promise<{
+	settings: ResearchPrivacySettingRecord[];
+	stats: PrivacyStats;
+}> {
+	const data = await adminJson<{ settings: ResearchPrivacySettingRecord[]; stats: PrivacyStats }>(
+		"/api/admin/privacy",
+	);
+	return { settings: data.settings ?? [], stats: data.stats! };
+}
+
+export async function createAdminPrivacy(
+	input: Record<string, unknown>,
+): Promise<ResearchPrivacySettingRecord> {
+	const data = await adminJson<{ setting: ResearchPrivacySettingRecord }>("/api/admin/privacy", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return data.setting;
+}
+
+export async function updateAdminPrivacy(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<ResearchPrivacySettingRecord> {
+	const data = await adminJson<{ setting: ResearchPrivacySettingRecord }>(
+		`/api/admin/privacy/${id}`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.setting;
+}
+
+export async function deleteAdminPrivacy(id: string): Promise<void> {
+	await adminJson(`/api/admin/privacy/${id}`, { method: "DELETE" });
+}
+
+export async function fetchAdminRetention(): Promise<{
+	policies: RetentionPolicyRecord[];
+	deletionRequests: DeletionRequestRecord[];
+	stats: RetentionStats;
+}> {
+	const data = await adminJson<{
+		policies: RetentionPolicyRecord[];
+		deletionRequests: DeletionRequestRecord[];
+		stats: RetentionStats;
+	}>("/api/admin/retention");
+	return {
+		policies: data.policies ?? [],
+		deletionRequests: data.deletionRequests ?? [],
+		stats: data.stats!,
+	};
+}
+
+export async function createAdminRetentionPolicy(
+	input: Record<string, unknown>,
+): Promise<RetentionPolicyRecord> {
+	const data = await adminJson<{ policy: RetentionPolicyRecord }>(
+		"/api/admin/retention/policies",
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.policy;
+}
+
+export async function updateAdminRetentionPolicy(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<RetentionPolicyRecord> {
+	const data = await adminJson<{ policy: RetentionPolicyRecord }>(
+		`/api/admin/retention/policies/${id}`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.policy;
+}
+
+export async function deleteAdminRetentionPolicy(id: string): Promise<void> {
+	await adminJson(`/api/admin/retention/policies/${id}`, { method: "DELETE" });
+}
+
+export async function createAdminDeletionRequest(
+	input: Record<string, unknown>,
+): Promise<DeletionRequestRecord> {
+	const data = await adminJson<{ deletionRequest: DeletionRequestRecord }>(
+		"/api/admin/retention/deletion-requests",
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.deletionRequest;
+}
+
+export async function updateAdminDeletionRequest(
+	id: string,
+	input: Record<string, unknown>,
+): Promise<DeletionRequestRecord> {
+	const data = await adminJson<{ deletionRequest: DeletionRequestRecord }>(
+		`/api/admin/retention/deletion-requests/${id}`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		},
+	);
+	return data.deletionRequest;
 }

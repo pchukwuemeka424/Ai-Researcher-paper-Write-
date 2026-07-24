@@ -1,4 +1,5 @@
 import { OUTPUT_TABS, PUBLICATION_SECTIONS } from '@/components/research-note/config/branding'
+import { isProgressTrackerDraft } from '@/components/research-note/features/progress/progressTracker'
 import { draftContentToMarkdown } from '@/components/research-note/lib/markdown'
 import { listDrafts } from '@/components/research-note/storage/repositories'
 import type { Draft, OutputType } from '@/components/research-note/storage/types'
@@ -33,6 +34,7 @@ export async function getDraftsContext(
   const drafts = await listDrafts(projectId)
   const filled = drafts
     .filter((d) => d.content.trim())
+    .filter((d) => !isProgressTrackerDraft(d.section))
     .filter(
       (d) =>
         !(

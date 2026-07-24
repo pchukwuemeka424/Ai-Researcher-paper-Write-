@@ -132,6 +132,12 @@ export function DataWorkspace({ projectId }: { projectId: string }) {
 
       {/* Toolbar: import is the primary action */}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-2">
+        <div className="mr-2 hidden min-w-0 max-w-xs sm:block">
+          <p className="text-[0.7rem] font-semibold text-[var(--color-ink)]">Datasets</p>
+          <p className="text-[0.65rem] leading-snug text-[var(--color-muted)]">
+            Import a spreadsheet, then use Stats or Charts. Save charts to Figures for your manuscript.
+          </p>
+        </div>
         {datasets.map((d) => (
           <div
             key={d.id}
@@ -175,7 +181,7 @@ export function DataWorkspace({ projectId }: { projectId: string }) {
             disabled={importing}
             className="inline-flex items-center gap-1 rounded-md bg-[var(--color-brand)] px-3 py-1.5 text-sm font-medium text-[var(--color-brand-ink)] disabled:opacity-50"
           >
-            {importing ? 'Opening…' : 'Open spreadsheet'}
+            {importing ? 'Uploading…' : 'Upload dataset'}
           </button>
           <button
             type="button"
@@ -268,7 +274,7 @@ export function DataWorkspace({ projectId }: { projectId: string }) {
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
-          <h2 className="text-lg font-semibold">Open a spreadsheet</h2>
+          <h2 className="text-lg font-semibold">Upload a dataset</h2>
           <p className="mt-1 max-w-md text-sm text-[var(--color-muted)]">
             Import a real <strong>.xlsx</strong>, <strong>.xls</strong>,{' '}
             <strong>.csv</strong> or <strong>.tsv</strong> file to read, edit,
@@ -282,7 +288,7 @@ export function DataWorkspace({ projectId }: { projectId: string }) {
               disabled={importing}
               className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-medium text-[var(--color-brand-ink)] disabled:opacity-50"
             >
-              {importing ? 'Opening…' : 'Open spreadsheet file'}
+              {importing ? 'Uploading…' : 'Upload dataset'}
             </button>
             <button
               type="button"

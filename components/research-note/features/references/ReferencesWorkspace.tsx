@@ -94,7 +94,7 @@ export function ReferencesWorkspace({ projectId }: { projectId: string }) {
             disabled={citation.applying || !citation.loaded}
             onChange={(e) => void onStyleChange(e.target.value as CitationStyle)}
             className="max-w-[16rem] rounded-md border border-[var(--color-border)] bg-[var(--color-canvas)] px-2 py-1 text-sm outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
-            title="Same styles as Reference Formatter — also updates Publication drafts and References bibliography"
+            title="Same styles as Reference Formatter — also updates Manuscript drafts and References bibliography"
           >
             {citation.styleGroups.map((group) => (
               <optgroup key={group.id} label={group.label}>
@@ -113,7 +113,7 @@ export function ReferencesWorkspace({ projectId }: { projectId: string }) {
       </div>
 
       <p className="text-xs text-[var(--color-muted)]">
-        Changing style uses the same {citation.styles.length}+ styles as Reference Formatter and reformats your library preview plus the Publication manuscript (in-text cites + References section).
+        Changing style uses the same {citation.styles.length}+ styles as Reference Formatter and reformats your library preview plus the Manuscript (in-text cites + References section).
       </p>
 
       {/* Library list */}

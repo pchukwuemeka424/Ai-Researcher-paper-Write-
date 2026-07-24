@@ -56,8 +56,9 @@ function trimBudget(parts: string[], budget: number): string {
 
 /**
  * Assemble a project's material for the AI drafting engine.
- * Connects Materials, Data, Figures, Lab Log, References, and existing drafts
- * so every section agent can read what the user has inserted elsewhere.
+ * Captures Materials, Data, Figures, Lab Log, References, Progress Reports,
+ * and manuscript section drafts so agents can ground prose
+ * in everything the researcher has inserted.
  */
 export async function assembleProjectContext(
   projectId: string,

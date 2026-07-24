@@ -168,6 +168,19 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 	const generateAbortRef = useRef<AbortController | null>(null);
 
 	useEffect(() => {
+		try {
+			const quick = sessionStorage.getItem("aula.research.quickTopic");
+			if (quick?.trim()) {
+				setTopic(quick.trim().slice(0, 500));
+				setTopicTouched(false);
+				sessionStorage.removeItem("aula.research.quickTopic");
+			}
+		} catch {
+			/* ignore storage errors */
+		}
+	}, []);
+
+	useEffect(() => {
 		const view = searchParams.get("view");
 		if (view === "saved") {
 			setShowSaved(true);
@@ -943,7 +956,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 											<h2 className="research-wizard-title">Your interest topic</h2>
 											<p className="research-wizard-subtitle">
 												Share a theme or draft focus — or select a research note below to set this
-												from Publication → Title. Generate ideas or a full paper grounded in that note.
+												from Manuscript → Title. Generate ideas or a full paper grounded in that note.
 											</p>
 										</div>
 									</div>
@@ -1008,7 +1021,7 @@ export function ResearchAssistant({ variant = "lecturer" }: { variant?: "lecture
 												</h3>
 												<p className="research-source-picker-help">
 													Optional: select research notes for the agent to read. Selecting a note
-													sets Interest topic from Publication → Title. The agent uses the note’s
+													sets Interest topic from Manuscript → Title. The agent uses the note’s
 													pages, drafts, data, figures, and findings to generate titles, abstracts,
 													and the full paper.
 												</p>

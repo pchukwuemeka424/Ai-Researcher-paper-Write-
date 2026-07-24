@@ -176,7 +176,7 @@ export function formatCitationBank(
     '- Prefer citing different bank entries for different claims; reuse a source only when it truly supports multiple points.',
     '- When comparing prior work, cite at least two bank sources in the same paragraph where debates or contrasts appear.',
     'Do not invent authors/years/papers outside this bank.',
-    '- Do not paste a full References bibliography into this body section (it is stored under Publication → References).',
+    '- Do not paste a full References bibliography into this body section (it is stored under Manuscript → References).',
     '',
     ...blocks,
   ].join('\n\n')

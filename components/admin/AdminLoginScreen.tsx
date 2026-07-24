@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { AdminLoginPageLayout } from "@/components/admin/AdminLoginPageLayout";
 import { AuthField } from "@/components/auth/AuthField";
 import { useAuth } from "@/hooks/useAuth";
+import { isAdminConsoleRole, isSuperAdmin } from "@/lib/admin-roles";
+import { SUPER_ADMIN_HOME_PATH, SUPER_ADMIN_LOGIN_PATH } from "@/lib/admin-nav";
 
 export function AdminLoginScreen() {
 	const router = useRouter();
@@ -16,7 +18,12 @@ export function AdminLoginScreen() {
 	const [submitting, setSubmitting] = useState(false);
 
 	useEffect(() => {
-		if (!loading && user?.role === "admin") router.replace("/admin");
+		if (loading || !user) return;
+		if (isSuperAdmin(user.role)) {
+			router.replace(SUPER_ADMIN_HOME_PATH);
+			return;
+		}
+		if (isAdminConsoleRole(user.role)) router.replace("/admin");
 	}, [loading, user, router]);
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -25,9 +32,15 @@ export function AdminLoginScreen() {
 		setError(null);
 		try {
 			const loggedIn = await login({ email, password });
-			if (loggedIn.role !== "admin") {
+			if (isSuperAdmin(loggedIn.role)) {
 				logout(false);
-				throw new Error("This account does not have admin access.");
+				throw new Error(
+					`Super administrators must sign in at ${SUPER_ADMIN_LOGIN_PATH}.`,
+				);
+			}
+			if (!isAdminConsoleRole(loggedIn.role)) {
+				logout(false);
+				throw new Error("This account does not have university admin access.");
 			}
 			router.push("/admin");
 		} catch (err) {
@@ -43,9 +56,9 @@ export function AdminLoginScreen() {
 				<div className="login-form-fields">
 					<AuthField
 						id="admin-login-email"
-						label="Admin email"
+						label="University admin email"
 						type="email"
-						placeholder="admin@aula.com"
+						placeholder="admin@youruniversity.edu.ng"
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}
 						autoComplete="email"

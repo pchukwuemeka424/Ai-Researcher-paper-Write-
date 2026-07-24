@@ -13,151 +13,163 @@ export type AdminNavGroup = {
 };
 
 export const ADMIN_LOGIN_PATH = "/admin/login";
+export const SUPER_ADMIN_LOGIN_PATH = "/super-admin/login";
+export const SUPER_ADMIN_HOME_PATH = "/super-admin";
 
+/** University admin console — scoped to one institution's users. */
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
 	{
-		id: "main",
-		label: "Main",
+		id: "users",
+		label: "Users",
 		items: [
 			{
 				id: "admin-overview",
-				label: "Overview",
+				label: "Users overview",
 				href: "/admin",
 				iconId: "dashboard",
-				description: "Platform metrics & activity",
-			},
-			{
-				id: "admin-governance",
-				label: "AI Governance",
-				href: "/admin/governance",
-				iconId: "governance",
-				description: "University-wide AI use in research",
+				description: "Account health, roles & org coverage",
 			},
 			{
 				id: "admin-users",
-				label: "Accounts",
+				label: "Account management",
 				href: "/admin/users",
 				iconId: "users",
-				description: "Manage users, roles & access",
+				description: "Create, assign roles, activate & suspend",
 			},
 		],
 	},
 	{
-		id: "governance",
-		label: "Governance",
+		id: "activity",
+		label: "User activity",
 		items: [
 			{
 				id: "admin-analytics",
-				label: "Usage analytics",
+				label: "User activity",
 				href: "/admin/analytics",
 				iconId: "analytics",
-				description: "By faculty, department, programme & cohort",
+				description: "Usage by user, role, faculty & programme",
 			},
 			{
-				id: "admin-policies",
-				label: "Policy engine",
-				href: "/admin/policies",
-				iconId: "policy",
-				description: "Permit, restrict, or block by role & faculty",
+				id: "admin-tokens",
+				label: "User tokens",
+				href: "/admin/tokens",
+				iconId: "tokens",
+				description: "Per-user quotas, usage & resets",
 			},
 			{
 				id: "admin-audit",
-				label: "Audit & alerts",
+				label: "User audit log",
 				href: "/admin/audit",
 				iconId: "audit",
-				description: "Immutable logs, flags & risk alerts",
+				description: "Immutable actions by account",
 			},
+		],
+	},
+	{
+		id: "safety",
+		label: "User safety",
+		items: [
 			{
-				id: "admin-approvals",
-				label: "Approvals",
-				href: "/admin/approvals",
-				iconId: "approvals",
-				description: "Tools, datasets & use-case workflows",
-			},
-			{
-				id: "admin-risks",
-				label: "Risk register",
-				href: "/admin/risks",
-				iconId: "risk",
-				description: "Inherent & residual AI risk scores",
-			},
-			{
-				id: "admin-compliance",
-				label: "Compliance",
-				href: "/admin/compliance",
-				iconId: "compliance",
-				description: "Nigeria AI Act, NDPA & institutional controls",
+				id: "admin-alerts",
+				label: "User alerts",
+				href: "/admin/alerts",
+				iconId: "alert",
+				description: "Login, usage & policy alerts per user",
 			},
 			{
 				id: "admin-incidents",
-				label: "Incidents",
+				label: "User incidents",
 				href: "/admin/incidents",
 				iconId: "incident",
-				description: "Policy breaches & sensitive-data events",
+				description: "Investigate incidents involving users",
 			},
 			{
-				id: "admin-inventory",
-				label: "AI inventory",
-				href: "/admin/inventory",
-				iconId: "inventory",
-				description: "Systems register, risk tiers & DPIAs",
+				id: "admin-policies",
+				label: "Role access policies",
+				href: "/admin/policies",
+				iconId: "policy",
+				description: "Policies targeting roles & faculties",
 			},
 			{
 				id: "admin-reports",
-				label: "Reports",
+				label: "User reports",
 				href: "/admin/reports",
 				iconId: "reports",
-				description: "Management & Senate governance packs",
+				description: "Activity, token & compliance reports",
 			},
 		],
 	},
 	{
-		id: "content",
-		label: "Content",
+		id: "userdata",
+		label: "User data",
 		items: [
 			{
-				id: "admin-lectures",
-				label: "Lectures",
-				href: "/admin/lectures",
-				iconId: "lesson-planner",
-				description: "Course plans & slide decks",
+				id: "admin-contributions",
+				label: "User AI disclosures",
+				href: "/admin/contributions",
+				iconId: "contribution",
+				description: "AI contribution statements by user",
 			},
 			{
-				id: "admin-sessions",
-				label: "Sessions",
-				href: "/admin/sessions",
-				iconId: "sessions",
-				description: "Research session activity",
+				id: "admin-provenance",
+				label: "User provenance",
+				href: "/admin/provenance",
+				iconId: "provenance",
+				description: "Prompt history owned by users",
 			},
-		],
-	},
-	{
-		id: "billing",
-		label: "Usage",
-		items: [
 			{
-				id: "admin-tokens",
-				label: "Tokens",
-				href: "/admin/tokens",
-				iconId: "tokens",
-				description: "Token quotas & consumption",
+				id: "admin-privacy",
+				label: "User privacy rules",
+				href: "/admin/privacy",
+				iconId: "privacy",
+				description: "Access & consent by role / faculty",
 			},
-		],
-	},
-	{
-		id: "system",
-		label: "System",
-		items: [
 			{
-				id: "admin-backup",
-				label: "Backup",
-				href: "/admin/backup",
-				iconId: "database",
-				description: "Database tables & backup files",
+				id: "admin-retention",
+				label: "User data retention",
+				href: "/admin/retention",
+				iconId: "retention",
+				description: "Retention policies & subject deletion",
 			},
 		],
 	},
 ];
+
+/** Platform super admin console — universities and university admins. */
+export const SUPER_ADMIN_NAV_GROUPS: AdminNavGroup[] = [
+	{
+		id: "platform",
+		label: "Platform",
+		items: [
+			{
+				id: "super-overview",
+				label: "Platform overview",
+				href: "/super-admin",
+				iconId: "dashboard",
+				description: "Onboarded universities and admin coverage",
+			},
+			{
+				id: "super-universities",
+				label: "Universities",
+				href: "/super-admin/universities",
+				iconId: "dashboard",
+				description: "Onboard and activate universities",
+			},
+			{
+				id: "super-admins",
+				label: "University admins",
+				href: "/super-admin/admins",
+				iconId: "users",
+				description: "Create and manage university admins",
+			},
+		],
+	},
+];
+
+export function adminNavGroupsForRole(role: string | null | undefined): AdminNavGroup[] {
+	if (role === "admin") return SUPER_ADMIN_NAV_GROUPS;
+	return ADMIN_NAV_GROUPS;
+}
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
 
@@ -167,6 +179,6 @@ export function adminHrefPath(href: string): string {
 
 export function isAdminNavActive(pathname: string, href: string): boolean {
 	const path = adminHrefPath(href);
-	if (path === "/admin") return pathname === "/admin";
+	if (path === "/admin" || path === "/super-admin") return pathname === path;
 	return pathname === path || pathname.startsWith(`${path}/`);
 }

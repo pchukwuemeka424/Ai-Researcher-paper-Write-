@@ -5,7 +5,7 @@ import {
   listAssets,
 } from '@/components/research-note/storage/repositories'
 import { relativeTime } from '@/components/research-note/lib/format'
-import { PlusIcon, TrashIcon } from '@/components/research-note/components/icons'
+import { PlusIcon, TrashIcon, ImageIcon } from '@/components/research-note/components/icons'
 import type { Asset } from '@/components/research-note/storage/types'
 import { WorkspaceSaveButton, useCloudSave } from '@/components/research-note/features/sync/CloudSave'
 
@@ -117,10 +117,17 @@ export function FiguresGallery({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">Figures</h2>
-          <p className="text-xs text-[var(--color-muted)]">
-            Upload images for this notebook. Use Save to sync them to your account.
-          </p>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-brand)]/10 text-[var(--color-brand)]" aria-hidden>
+              <ImageIcon className="h-4 w-4" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold">Figures</h2>
+              <p className="text-xs text-[var(--color-muted)]">
+                Upload images for this notebook. Charts saved from Data and pastes from Lab Log also appear here.
+              </p>
+            </div>
+          </div>
         </div>
         {canWrite && (
           <>

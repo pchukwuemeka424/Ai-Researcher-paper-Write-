@@ -121,7 +121,7 @@ async function ensureInTextCitations(
 
 /**
  * Multi-agent draft generation: generates ONE publication section at a time.
- * Lab Reports and Progress Reports must be written manually (no whole-doc gen).
+ * Progress Reports must be written manually (no whole-doc gen).
  */
 export async function generateDraft(
   projectId: string,
@@ -130,7 +130,7 @@ export async function generateDraft(
   existingContent?: string | null,
 ): Promise<GeneratedDraft> {
   if (outputType !== 'publication' || !section) {
-    throw new Error('Generate draft is available per Publication section only.')
+    throw new Error('Generate draft is available per Manuscript section only.')
   }
   if (section === 'References') {
     throw new Error(
